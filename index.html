@@ -612,6 +612,7 @@ function confirmarFechamento() {
   if (!estado.diferencas) estado.diferencas = {};
   estado.diferencas[dataSel] = { esperado: saldoEsperado, real: valor, diferenca: diferenca };
   salvar(); render();
+  if (navigator.onLine) sincronizarDadosCompletos(); // ✅ ADICIONADO
   if (diferenca === 0) toast('✅ Caixa fechado sem diferença!');
   else if (diferenca > 0) toast('⚠️ Sobra de ' + BRL.format(diferenca) + ' no caixa!');
   else toast('❌ Falta de ' + BRL.format(Math.abs(diferenca)) + ' no caixa!');
@@ -629,7 +630,7 @@ function editarFechamento() {
   const caixaAnterior = obterCaixaAnterior();
   const saldoEsperado = caixaAnterior + entradasDinheiro - saidasDinheiro;
   const valorAtual = estado.fechamentos?.[dataSel] || saldoEsperado;
-  const novoValor = prompt('✏️ EDITAR FECHAMENTO - ' + fmtBR(dataSel) + '\n\nValor atual: ' + BRL.format(valorAtual) + '\nSaldo esperado: ' + BRL.format(saldoEsperado) + '\n\nDigite o novo valor:', valorAtual.toFixed(2).replace('.', ','));
+  const novoValor = prompt('✏️ EDITAR FECHAMENTO...', valorAtual.toFixed(2).replace('.', ','));
   if (novoValor === null) return;
   const valor = parseValor(novoValor);
   if (isNaN(valor) || valor < 0) { toast('⚠️ Valor inválido!'); return; }
@@ -639,6 +640,7 @@ function editarFechamento() {
   if (!estado.diferencas) estado.diferencas = {};
   estado.diferencas[dataSel] = { esperado: saldoEsperado, real: valor, diferenca: diferenca };
   salvar(); render();
+  if (navigator.onLine) sincronizarDadosCompletos(); // ✅ ADICIONADO
   toast('✅ Fechamento atualizado! Diferença: ' + BRL.format(diferenca));
 }
 
