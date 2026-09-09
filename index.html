@@ -514,6 +514,7 @@ function verificarSenha() {
   var senha = document.getElementById('senhaInput').value;
   if (senha === 'sandra2024') {
     document.getElementById('loginOverlay').style.display = 'none';
+    setTimeout(function() { verificarInicioDoDia(); }, 1000);
   } else {
     document.getElementById('loginErro').style.display = 'block';
     document.getElementById('senhaInput').value = '';
@@ -524,6 +525,77 @@ document.getElementById('senhaInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') verificarSenha();
 });
 
+function verificarInicioDoDia() {
+  if (dataSel !== hojeISO()) return;
+  
+  const ontem = new Date();
+  ontem.setDate(ontem.getDate() - 1);
+  const ontemISO = ontem.getFullYear() + '-' + 
+                   String(ontem.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(ontem.getDate()).padStart(2, '0');
+  
+  const fechamentoOntem = estado.fechamentos?.[ontemISO];
+  const confirmacaoHoje = localStorage.getItem('confirmacao_caixa_' + hojeISO());
+  
+  if (confirmacaoHoje) return;
+  
+  if (fechamentoOntem !== undefined && fechamentoOntem !== null) {
+    const valorOntem = fechamentoOntem;
+    
+    const confirmar = confirm(
+      '🌅 Bom dia!\n\n' +
+      'O fechamento do dia anterior (' + fmtBR(ontemISO) + ') foi:\n\n' +
+      '💰 ' + BRL.format(valorOntem) + '\n\n' +
+      'Este valor está correto?\n\n' +
+      'OK = Confirmar\n' +
+      'Cancelar = Editar valor'
+    );
+    
+    if (!confirmar) {
+      const novoValor = prompt(
+        'Digite o valor CORRETO do fechamento do dia anterior (' + fmtBR(ontemISO) + '):',
+        valorOntem.toFixed(2).replace('.', ',')
+      );
+      
+      if (novoValor !== null) {
+        const valor = parseValor(novoValor);
+        if (!isNaN(valor) && valor >= 0) {
+          if (!estado.fechamentos) estado.fechamentos = {};
+          estado.fechamentos[ontemISO] = valor;
+          salvar();
+          render();
+          toast('✅ Fechamento atualizado: ' + BRL.format(valor));
+        }
+      }
+    } else {
+      toast('✅ Fechamento confirmado: ' + BRL.format(valorOntem));
+    }
+  } else {
+    const configurar = confirm(
+      '🌅 Bom dia!\n\n' +
+      'Não foi registrado o fechamento do dia anterior (' + fmtBR(ontemISO) + ').\n\n' +
+      'Deseja informar o valor agora?\n\n' +
+      'OK = Sim\n' +
+      'Cancelar = Continuar com R$ 0,00'
+    );
+    
+    if (configurar) {
+      const novoValor = prompt('Digite o valor do fechamento (' + fmtBR(ontemISO) + '):', '0,00');
+      if (novoValor !== null) {
+        const valor = parseValor(novoValor);
+        if (!isNaN(valor) && valor >= 0) {
+          if (!estado.fechamentos) estado.fechamentos = {};
+          estado.fechamentos[ontemISO] = valor;
+          salvar();
+          render();
+          toast('✅ Fechamento definido: ' + BRL.format(valor));
+        }
+      }
+    }
+  }
+  
+  localStorage.setItem('confirmacao_caixa_' + hojeISO(), 'confirmado');
+}
 /* =================== CONFIGURAÇÃO =================== */
 const CHAVE = 'caixa_bazar_sandra_v1';
 const firebaseConfig = {
@@ -668,7 +740,12 @@ async function sincronizarDadosCompletos() {
     }
     const hashLocal = gerarHash(estado.movimentos);
     await db.collection('caixa').doc('metadados').set({ nome: estado.nome, meses: Object.keys(movimentosPorMes), totalMovimentos: estado.movimentos.length, hash: hashLocal, ultimaModificacao: new Date().toISOString() });
-    syncStatus.ultimoHashLocal = hashLocal;
+ await db.collection('caixa').doc('fechamentos').set({
+      fechamentos: estado.fechamentos || {},
+      diferencas: estado.diferencas || {},
+      ultimaModificacao: new Date().toISOString()
+    });    
+syncStatus.ultimoHashLocal = hashLocal;
     estado.ultimoEnvio = new Date().toISOString(); salvar();
     syncStatus.ultimaSync = new Date(); syncStatus.pendentes = 0; syncStatus.ultimoErro = null;
     atualizarIndicadorSync('sync-ok', 'Sincronizado');
@@ -692,6 +769,11 @@ async function carregarDoGoogle() {
     const todosMovimentos = [];
     for (const mes of meses) { const docRef = await db.collection('caixa').doc('dados_' + mes).get(); if (docRef.exists) { todosMovimentos.push(...(docRef.data().movimentos || [])); } }
     estado.movimentos = todosMovimentos; estado.nome = metadados.nome || estado.nome;
+ const fechDoc = await db.collection('caixa').doc('fechamentos').get();
+    if (fechDoc.exists) {
+      const dadosFech = fechDoc.data();
+      estado.fechamentos = dadosFech.fechamentos || {};
+      estado.diferencas = dadosFech.diferencas || {};
     salvar(); render(); renderBaseResumo();
     syncStatus.ultimaSync = new Date(); syncStatus.pendentes = 0;
     atualizarIndicadorSync('sync-ok', 'Atualizado'); toast('✅ ' + estado.movimentos.length + ' movimentos carregados!');
