@@ -767,18 +767,34 @@ async function carregarDoGoogle() {
     if (!metadadosDoc.exists) { await sincronizarDadosCompletos(); return; }
     const metadados = metadadosDoc.data(); const meses = metadados.meses || [];
     const todosMovimentos = [];
-    for (const mes of meses) { const docRef = await db.collection('caixa').doc('dados_' + mes).get(); if (docRef.exists) { todosMovimentos.push(...(docRef.data().movimentos || [])); } }
-    estado.movimentos = todosMovimentos; estado.nome = metadados.nome || estado.nome;
- const fechDoc = await db.collection('caixa').doc('fechamentos').get();
+    for (const mes of meses) { 
+      const docRef = await db.collection('caixa').doc('dados_' + mes).get(); 
+      if (docRef.exists) { 
+        todosMovimentos.push(...(docRef.data().movimentos || [])); 
+      } 
+    }
+    estado.movimentos = todosMovimentos; 
+    estado.nome = metadados.nome || estado.nome;
+    
+    // Carregar fechamentos
+    const fechDoc = await db.collection('caixa').doc('fechamentos').get();
     if (fechDoc.exists) {
       const dadosFech = fechDoc.data();
       estado.fechamentos = dadosFech.fechamentos || {};
       estado.diferencas = dadosFech.diferencas || {};
+    }
+    
     salvar(); render(); renderBaseResumo();
     syncStatus.ultimaSync = new Date(); syncStatus.pendentes = 0;
-    atualizarIndicadorSync('sync-ok', 'Atualizado'); toast('✅ ' + estado.movimentos.length + ' movimentos carregados!');
-  } catch (erro) { console.error('❌ Erro:', erro); atualizarIndicadorSync('sync-erro', 'Erro'); }
-  finally { syncStatus.sincronizando = false; }
+    atualizarIndicadorSync('sync-ok', 'Atualizado'); 
+    toast('✅ ' + estado.movimentos.length + ' movimentos carregados!');
+  } catch (erro) { 
+    console.error('❌ Erro:', erro); 
+    atualizarIndicadorSync('sync-erro', 'Erro'); 
+  }
+  finally { 
+    syncStatus.sincronizando = false; 
+  }
 }
 
 function iniciarSyncAutomatico() {
