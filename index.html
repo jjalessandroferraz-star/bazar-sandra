@@ -302,6 +302,8 @@
     <button id="tabBtnCaixa" class="on" data-page="caixa">🧾 Caixa do dia</button>
     <button id="tabBtnBases" data-page="bases">📚 Bases & Backup</button>
     <button id="tabBtnRel" data-page="relatorios">📊 Relatórios</button>
+<button id="tabBtnFechamento" data-page="fechamento">📒 Fechamento Diário</button>
+
   </div>
 
   <div class="page on" id="pageCaixa">
@@ -506,7 +508,81 @@
 
   <div class="center"><div class="savenote" id="savenote"></div></div>
 </div>
-<div class="toast" id="toast"></div>
+<div class="page" id="pageFechamento">
+  <div class="painel">
+    <!-- ESQUERDA: FECHAMENTOS DE TODOS OS DIAS -->
+    <div class="col">
+      <div class="card">
+        <div class="head">
+          <h2>📅 Fechamentos de todos os dias</h2>
+          <select id="filtroMesCaderno" class="relsel" onchange="renderCaderninho()" style="max-width:150px;"></select>
+        </div>
+        <div class="body"><div id="historicoCaderno"></div></div>
+      </div>
+    </div>
+
+    <!-- DIREITA: RESUMO + ANOTAÇÕES -->
+    <div class="col">
+      <div class="card dark">
+        <div class="head"><h2>📊 Resumo do dia</h2></div>
+        <div class="body">
+          <div class="trow" style="border-bottom:1px solid rgba(255,255,255,.15);">
+            <div class="t">📅 Data</div>
+            <div class="amt" id="fechDataCaderno" style="font-size:16px;">—</div>
+          </div>
+          <div class="trow"><div class="t">💰 Fechamento oficial</div><div class="amt pos" id="resumoFechamento">R$ 0,00</div></div>
+          <div class="trow"><div class="t">💸 Emprestado</div><div class="amt neg" id="resumoEmprestado">R$ 0,00</div></div>
+          <div class="trow"><div class="t">💳 Recebido</div><div class="amt pos" id="resumoRecebido">R$ 0,00</div></div>
+          <div class="trow saldo"><div class="t">🏦 Saldo real</div><div class="amt" id="resumoSaldoReal">R$ 0,00</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="head"><h2>📝 Anotações do dia</h2></div>
+        <div class="body">
+          <!-- CORRIGIR FECHAMENTO -->
+          <div style="background:#FFF8E1; border:2px dashed #E8A838; border-radius:12px; padding:12px; margin-bottom:15px;">
+            <label style="font-weight:700; color:var(--wine); display:block; margin-bottom:8px;">💰 Corrigir valor do fechamento</label>
+            <div class="saida-row">
+              <input id="fechValorCaderno" inputmode="decimal" placeholder="R$ 0,00" style="width:140px; font-weight:700;">
+              <button id="btnCorrigirFechamento" style="background:var(--gold); color:#4a2d00;">✓ Corrigir</button>
+            </div>
+          </div>
+
+          <!-- EMPRÉSTIMOS -->
+          <div class="saida-box" style="border-color:#4CAF50; background:#F0F7F1;">
+            <h3 style="color:#2E7D32;">💸 Dinheiro emprestado</h3>
+            <div class="saida-row">
+              <input id="emprestimoValor" inputmode="decimal" placeholder="R$ 0,00" style="width:140px;">
+              <input id="emprestimoPessoa" placeholder="Para quem?" style="flex:1;">
+              <button id="btnAddEmprestimo" style="background:var(--green);">+ Adicionar</button>
+            </div>
+            <div id="listaEmprestimos" style="margin-top:10px;"></div>
+          </div>
+
+          <!-- RECEBIDOS -->
+          <div class="saida-box" style="border-color:#FF9800; background:#FFF8E1;">
+            <h3 style="color:#E65100;">💳 Dinheiro recebido</h3>
+            <div class="saida-row">
+              <input id="recebidoValor" inputmode="decimal" placeholder="R$ 0,00" style="width:140px;">
+              <input id="recebidoPessoa" placeholder="De quem?" style="flex:1;">
+              <button id="btnAddRecebido" style="background:#FF9800;">+ Adicionar</button>
+            </div>
+            <div id="listaRecebidos" style="margin-top:10px;"></div>
+          </div>
+
+          <!-- OBSERVAÇÕES -->
+          <div style="margin-top:15px;">
+            <label style="font-weight:700; color:var(--wine);">📝 Observações gerais</label>
+            <textarea id="obsGerais" rows="3" style="width:100%; border:2px solid var(--line); border-radius:12px; padding:10px; font-family:var(--body); font-size:14px; margin-top:8px;" placeholder="Anotações sobre o dia..."></textarea>
+          </div>
+          <button class="btn green" id="btnSalvarCaderno" style="width:100%; margin-top:10px; justify-content:center;">💾 Salvar Anotações</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+         
 
 <script>
 /* =================== LOGIN =================== */
@@ -528,7 +604,9 @@ document.getElementById('senhaInput').addEventListener('keydown', function(e) {
 function verificarInicioDoDia() {
   if (dataSel !== hojeISO()) return;
   
+  // Calcula a data de ontem corretamente
   const ontem = new Date();
+  ontem.setHours(12, 0, 0, 0); // Define meio-dia para evitar problemas de fuso
   ontem.setDate(ontem.getDate() - 1);
   const ontemISO = ontem.getFullYear() + '-' + 
                    String(ontem.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -540,7 +618,7 @@ function verificarInicioDoDia() {
   if (confirmacaoHoje) return;
   
   if (fechamentoOntem !== undefined && fechamentoOntem !== null) {
-    const valorOntem = fechamentoOntem;
+    const valorOntem = typeof fechamentoOntem === 'object' ? fechamentoOntem.valor : fechamentoOntem;
     
     const confirmar = confirm(
       '🌅 Bom dia!\n\n' +
@@ -564,6 +642,7 @@ function verificarInicioDoDia() {
           estado.fechamentos[ontemISO] = valor;
           salvar();
           render();
+          if (navigator.onLine) sincronizarDadosCompletos();
           toast('✅ Fechamento atualizado: ' + BRL.format(valor));
         }
       }
@@ -588,6 +667,7 @@ function verificarInicioDoDia() {
           estado.fechamentos[ontemISO] = valor;
           salvar();
           render();
+          if (navigator.onLine) sincronizarDadosCompletos();
           toast('✅ Fechamento definido: ' + BRL.format(valor));
         }
       }
@@ -647,12 +727,23 @@ estado = carregar();
 
 /* =================== CAIXA DO DIA ANTERIOR =================== */
 function dataAnteriorISO() {
-  const d = new Date(dataSel);
+  // Usar T12:00:00 para evitar problemas de fuso horário
+  const d = new Date(dataSel + 'T12:00:00');
   d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  // Formatar manualmente para YYYY-MM-DD
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
 }
+
 function obterCaixaAnterior() {
-  return estado.fechamentos?.[dataAnteriorISO()] || 0;
+  const chave = dataAnteriorISO();
+  const valor = estado.fechamentos?.[chave];
+  // Se for número, retorna; se for objeto, retorna .valor
+  if (typeof valor === 'number') return valor;
+  if (valor && typeof valor === 'object') return valor.valor || 0;
+  return 0;
 }
 function editarCaixaAnterior() {
   const ontemISO = dataAnteriorISO();
@@ -733,24 +824,62 @@ async function sincronizarDadosCompletos() {
   syncStatus.sincronizando = true;
   atualizarIndicadorSync('sync-sincronizando', 'Sincronizando...');
   try {
+    // SALVAR MOVIMENTOS POR MÊS
     const movimentosPorMes = {};
-    estado.movimentos.forEach(m => { const mes = (m.data || '').slice(0, 7) || 'sem_data'; if (!movimentosPorMes[mes]) movimentosPorMes[mes] = []; movimentosPorMes[mes].push(m); });
+    estado.movimentos.forEach(m => { 
+      const mes = (m.data || '').slice(0, 7) || 'sem_data'; 
+      if (!movimentosPorMes[mes]) movimentosPorMes[mes] = []; 
+      movimentosPorMes[mes].push(m); 
+    });
     for (const mes of Object.keys(movimentosPorMes)) {
-      await db.collection('caixa').doc('dados_' + mes).set({ movimentos: movimentosPorMes[mes], nome: estado.nome, mes: mes, total: movimentosPorMes[mes].length, ultimaModificacao: new Date().toISOString() });
+      await db.collection('caixa').doc('dados_' + mes).set({ 
+        movimentos: movimentosPorMes[mes], 
+        nome: estado.nome, 
+        mes: mes, 
+        total: movimentosPorMes[mes].length, 
+        ultimaModificacao: new Date().toISOString() 
+      });
     }
+
+    // SALVAR METADADOS
     const hashLocal = gerarHash(estado.movimentos);
-    await db.collection('caixa').doc('metadados').set({ nome: estado.nome, meses: Object.keys(movimentosPorMes), totalMovimentos: estado.movimentos.length, hash: hashLocal, ultimaModificacao: new Date().toISOString() });
- await db.collection('caixa').doc('fechamentos').set({
+    await db.collection('caixa').doc('metadados').set({ 
+      nome: estado.nome, 
+      meses: Object.keys(movimentosPorMes), 
+      totalMovimentos: estado.movimentos.length, 
+      hash: hashLocal, 
+      ultimaModificacao: new Date().toISOString() 
+    });
+
+    // SALVAR FECHAMENTOS E DIFERENÇAS
+    await db.collection('caixa').doc('fechamentos').set({
       fechamentos: estado.fechamentos || {},
       diferencas: estado.diferencas || {},
       ultimaModificacao: new Date().toISOString()
-    });    
-syncStatus.ultimoHashLocal = hashLocal;
-    estado.ultimoEnvio = new Date().toISOString(); salvar();
-    syncStatus.ultimaSync = new Date(); syncStatus.pendentes = 0; syncStatus.ultimoErro = null;
+    });
+
+    // SALVAR CADERNINHO
+    await db.collection('caixa').doc('caderninho').set({
+      caderninho: caderninho || {},
+      ultimaModificacao: new Date().toISOString()
+    });
+
+    syncStatus.ultimoHashLocal = hashLocal;
+    estado.ultimoEnvio = new Date().toISOString(); 
+    salvar();
+    syncStatus.ultimaSync = new Date(); 
+    syncStatus.pendentes = 0; 
+    syncStatus.ultimoErro = null;
     atualizarIndicadorSync('sync-ok', 'Sincronizado');
-  } catch (erro) { console.error('❌ Erro:', erro); syncStatus.ultimoErro = erro.message; syncStatus.pendentes++; atualizarIndicadorSync('sync-erro', 'Erro'); }
-  finally { syncStatus.sincronizando = false; }
+  } catch (erro) { 
+    console.error('❌ Erro:', erro); 
+    syncStatus.ultimoErro = erro.message; 
+    syncStatus.pendentes++; 
+    atualizarIndicadorSync('sync-erro', 'Erro'); 
+  }
+  finally { 
+    syncStatus.sincronizando = false; 
+  }
 }
 
 function mostrarStatusSync() {
@@ -761,11 +890,14 @@ function mostrarStatusSync() {
 
 async function carregarDoGoogle() {
   if (!navigator.onLine) { toast('⚠️ Sem conexão'); return; }
-  syncStatus.sincronizando = true; atualizarIndicadorSync('sync-sincronizando', 'Carregando...');
+  syncStatus.sincronizando = true; 
+  atualizarIndicadorSync('sync-sincronizando', 'Carregando...');
   try {
     const metadadosDoc = await db.collection('caixa').doc('metadados').get();
     if (!metadadosDoc.exists) { await sincronizarDadosCompletos(); return; }
-    const metadados = metadadosDoc.data(); const meses = metadados.meses || [];
+    
+    const metadados = metadadosDoc.data(); 
+    const meses = metadados.meses || [];
     const todosMovimentos = [];
     for (const mes of meses) { 
       const docRef = await db.collection('caixa').doc('dados_' + mes).get(); 
@@ -776,7 +908,7 @@ async function carregarDoGoogle() {
     estado.movimentos = todosMovimentos; 
     estado.nome = metadados.nome || estado.nome;
     
-    // Carregar fechamentos
+    // CARREGAR FECHAMENTOS
     const fechDoc = await db.collection('caixa').doc('fechamentos').get();
     if (fechDoc.exists) {
       const dadosFech = fechDoc.data();
@@ -784,8 +916,21 @@ async function carregarDoGoogle() {
       estado.diferencas = dadosFech.diferencas || {};
     }
     
-    salvar(); render(); renderBaseResumo();
-    syncStatus.ultimaSync = new Date(); syncStatus.pendentes = 0;
+    // CARREGAR CADERNINHO
+    const cadDoc = await db.collection('caixa').doc('caderninho').get();
+    if (cadDoc.exists) {
+      const dadosCad = cadDoc.data();
+      caderninho = dadosCad.caderninho || {};
+      salvarCaderninhoStorage();
+    }
+    
+    salvar(); 
+    render(); 
+    renderBaseResumo();
+    renderCaderninho();
+    
+    syncStatus.ultimaSync = new Date(); 
+    syncStatus.pendentes = 0;
     atualizarIndicadorSync('sync-ok', 'Atualizado'); 
     toast('✅ ' + estado.movimentos.length + ' movimentos carregados!');
   } catch (erro) { 
@@ -1211,9 +1356,15 @@ document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>{
   document.getElementById('pageCaixa').classList.toggle('on', b.dataset.page==='caixa');
   document.getElementById('pageBases').classList.toggle('on', b.dataset.page==='bases');
   document.getElementById('pageRelatorios').classList.toggle('on', b.dataset.page==='relatorios');
+  document.getElementById('pageFechamento').classList.toggle('on', b.dataset.page==='fechamento');
   if(b.dataset.page==='bases') renderBaseResumo();
   if(b.dataset.page==='relatorios') renderRelatorios();
+  if(b.dataset.page==='fechamento') renderCaderninho();
 });
+document.getElementById('btnAddEmprestimo').onclick = addEmprestimo;
+document.getElementById('btnAddRecebido').onclick = addRecebido;
+document.getElementById('btnSalvarCaderno').onclick = salvarObs;
+document.getElementById('btnCorrigirFechamento').onclick = corrigirFechamentoCaderno;
 const drop=document.getElementById('drop'), csvInput=document.getElementById('csvInput');
 drop.onclick=()=>csvInput.click();
 drop.addEventListener('dragover', e=>{ e.preventDefault(); });
@@ -1242,9 +1393,211 @@ function limparLocal(){
     setTimeout(()=>location.reload(),1500);
   }
 }
+/* =================== CADERNINHO =================== */
+let caderninho = {};
 
+function carregarCaderninho() {
+  try {
+    const s = localStorage.getItem('caderninho_bazar_sandra');
+    if (s) caderninho = JSON.parse(s);
+  } catch(e) {
+    caderninho = {};
+  }
+}
+
+function salvarCaderninhoStorage() {
+  try {
+    localStorage.setItem('caderninho_bazar_sandra', JSON.stringify(caderninho));
+  } catch(e) {}
+}
+
+function renderCaderninho() {
+  const registro = caderninho[dataSel] || { emprestimos: [], recebidos: [], obs: '' };
+  
+  document.getElementById('fechDataCaderno').textContent = fmtBR(dataSel);
+  
+  const fechamentoOficial = estado.fechamentos?.[dataSel] || 0;
+  const valorFechamento = typeof fechamentoOficial === 'object' ? fechamentoOficial.valor : fechamentoOficial;
+  
+  // Preenche o input de corrigir (só se não estiver sendo editado)
+  const inputFech = document.getElementById('fechValorCaderno');
+  if (inputFech && document.activeElement !== inputFech) {
+    inputFech.value = valorFechamento.toFixed(2).replace('.', ',');
+  }
+  
+  // Renderiza empréstimos
+  document.getElementById('listaEmprestimos').innerHTML = registro.emprestimos.map((e, i) => 
+    '<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #ddd;">' +
+    '<span>' + e.pessoa + '</span><span>' + BRL.format(e.valor) + '</span>' +
+    '<button onclick="removerEmprestimo(' + i + ')" style="background:none;border:none;color:red;cursor:pointer;">✕</button></div>'
+  ).join('');
+  
+  // Renderiza recebidos
+  document.getElementById('listaRecebidos').innerHTML = registro.recebidos.map((r, i) => 
+    '<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #ddd;">' +
+    '<span>' + r.pessoa + '</span><span>' + BRL.format(r.valor) + '</span>' +
+    '<button onclick="removerRecebido(' + i + ')" style="background:none;border:none;color:red;cursor:pointer;">✕</button></div>'
+  ).join('');
+  
+  document.getElementById('obsGerais').value = registro.obs || '';
+  
+  const totalEmprestado = registro.emprestimos.reduce((a,b) => a + b.valor, 0);
+  const totalRecebido = registro.recebidos.reduce((a,b) => a + b.valor, 0);
+  const saldoReal = valorFechamento - totalEmprestado + totalRecebido;
+  
+  document.getElementById('resumoFechamento').textContent = BRL.format(valorFechamento);
+  document.getElementById('resumoEmprestado').textContent = BRL.format(totalEmprestado);
+  document.getElementById('resumoRecebido').textContent = BRL.format(totalRecebido);
+  document.getElementById('resumoSaldoReal').textContent = BRL.format(saldoReal);
+  
+  // POPULAR FILTRO DE MESES
+  const selMes = document.getElementById('filtroMesCaderno');
+  if (selMes) {
+    const meses = [...new Set(Object.keys(estado.fechamentos || {}).map(d => d.slice(0, 7)))].sort().reverse();
+    const mesAtual = selMes.value || (meses[0] || dataSel.slice(0, 7));
+    
+    selMes.innerHTML = meses.map(m => {
+      const [y, mo] = m.split('-');
+      const nm = new Date(+y, +mo - 1, 1).toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
+      return '<option value="' + m + '"' + (m === mesAtual ? ' selected' : '') + '>' + nm + '</option>';
+    }).join('');
+    
+    if (meses.length === 0) {
+      selMes.innerHTML = '<option value="' + dataSel.slice(0, 7) + '">' + 
+        new Date(dataSel + 'T12:00:00').toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'}) + '</option>';
+    }
+  }
+  
+  // HISTÓRICO COM FILTRO POR MÊS
+  const mesFiltrado = selMes ? selMes.value : dataSel.slice(0, 7);
+  
+  const todasDatas = new Set();
+  Object.keys(estado.fechamentos || {}).forEach(d => todasDatas.add(d));
+  Object.keys(caderninho).forEach(d => todasDatas.add(d));
+  
+  const datasFiltradas = [...todasDatas]
+    .filter(d => d.startsWith(mesFiltrado))
+    .sort()
+    .reverse();
+  
+  if (datasFiltradas.length === 0) {
+    document.getElementById('historicoCaderno').innerHTML = 
+      '<div style="text-align:center; padding:20px; color:var(--muted);">Nenhum fechamento neste mês.</div>';
+  } else {
+    document.getElementById('historicoCaderno').innerHTML = datasFiltradas.map(d => {
+      const r = caderninho[d] || { emprestimos: [], recebidos: [], obs: '' };
+      const emp = r.emprestimos.reduce((a,b) => a + b.valor, 0);
+      const rec = r.recebidos.reduce((a,b) => a + b.valor, 0);
+      const fech = estado.fechamentos?.[d] || 0;
+      const fechValor = typeof fech === 'object' ? fech.valor : fech;
+      const saldoReal = fechValor - emp + rec;
+      const temObs = r.obs && r.obs.trim() ? ' 📝' : '';
+      const temEmprestimo = emp > 0 ? ' 💸' : '';
+      const temRecebido = rec > 0 ? ' 💳' : '';
+      
+      return '<div style="padding:12px; border:1px solid #e0d5c5; border-radius:10px; margin-bottom:8px; background:' + (d === dataSel ? '#FFF8E1' : '#fff') + ';">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="dataSel=\'' + d + '\'; document.getElementById(\'dataSel\').value=dataSel; render(); renderCaderninho();">' +
+          '<b style="font-size:15px;">📅 ' + fmtBR(d) + '</b>' +
+          '<div style="display:flex; gap:10px; align-items:center;">' +
+            '<span style="font-weight:700; color:#2E7D32;">💰 ' + BRL.format(fechValor) + '</span>' +
+            '<span style="font-size:12px; color:#666;">' + temEmprestimo + temRecebido + temObs + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; gap:15px; margin-top:8px; font-size:12px; color:#666;">' +
+          '<span>💸 Emp: ' + BRL.format(emp) + '</span>' +
+          '<span>💳 Rec: ' + BRL.format(rec) + '</span>' +
+          '<span>🏦 Saldo real: <b>' + BRL.format(saldoReal) + '</b></span>' +
+        '</div>' +
+        (r.obs ? '<div style="margin-top:5px; font-size:12px; color:#555; font-style:italic;">📝 ' + r.obs + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+}
+
+function addEmprestimo() {
+  const valor = parseValor(document.getElementById('emprestimoValor').value);
+  const pessoa = document.getElementById('emprestimoPessoa').value.trim();
+  if (!(valor > 0) || !pessoa) { toast('Digite valor e pessoa'); return; }
+  if (!caderninho[dataSel]) caderninho[dataSel] = { emprestimos: [], recebidos: [], obs: '' };
+  caderninho[dataSel].emprestimos.push({ pessoa, valor });
+  salvarCaderninhoStorage();
+  if (navigator.onLine) sincronizarDadosCompletos();
+  document.getElementById('emprestimoValor').value = '';
+  document.getElementById('emprestimoPessoa').value = '';
+  renderCaderninho();
+  toast('Empréstimo registrado!');
+}
+
+function addRecebido() {
+  const valor = parseValor(document.getElementById('recebidoValor').value);
+  const pessoa = document.getElementById('recebidoPessoa').value.trim();
+  if (!(valor > 0) || !pessoa) { toast('Digite valor e pessoa'); return; }
+  if (!caderninho[dataSel]) caderninho[dataSel] = { emprestimos: [], recebidos: [], obs: '' };
+  caderninho[dataSel].recebidos.push({ pessoa, valor });
+  salvarCaderninhoStorage();
+  if (navigator.onLine) sincronizarDadosCompletos();
+  document.getElementById('recebidoValor').value = '';
+  document.getElementById('recebidoPessoa').value = '';
+  renderCaderninho();
+  toast('Recebimento registrado!');
+}
+
+function removerEmprestimo(index) {
+  caderninho[dataSel].emprestimos.splice(index, 1);
+  salvarCaderninhoStorage();
+  if (navigator.onLine) sincronizarDadosCompletos();
+  renderCaderninho();
+}
+
+function removerRecebido(index) {
+  caderninho[dataSel].recebidos.splice(index, 1);
+  salvarCaderninhoStorage();
+  if (navigator.onLine) sincronizarDadosCompletos();
+  renderCaderninho();
+}
+
+function salvarObs() {
+  if (!caderninho[dataSel]) caderninho[dataSel] = { emprestimos: [], recebidos: [], obs: '' };
+  caderninho[dataSel].obs = document.getElementById('obsGerais').value;
+  salvarCaderninhoStorage();
+  if (navigator.onLine) sincronizarDadosCompletos();
+  toast('✅ Anotações salvas!');
+}
+
+function corrigirFechamentoCaderno() {
+  const input = document.getElementById('fechValorCaderno');
+  const novoValor = parseValor(input.value);
+  
+  if (isNaN(novoValor) || novoValor < 0) {
+    toast('⚠️ Valor inválido!');
+    return;
+  }
+  
+  if (!estado.fechamentos) estado.fechamentos = {};
+  estado.fechamentos[dataSel] = novoValor;
+  
+  // Recalcular diferença
+  const dia = estado.movimentos.filter(m => m.data === dataSel);
+  const entradasDinheiro = dia.filter(m => m.tipo === 'entrada' && m.forma === 'Dinheiro').reduce((a,b) => a + b.valor, 0);
+  const saidasDinheiro = dia.filter(m => m.tipo === 'saida' && m.forma === 'Dinheiro').reduce((a,b) => a + b.valor, 0);
+  const caixaAnterior = obterCaixaAnterior();
+  const saldoEsperado = caixaAnterior + entradasDinheiro - saidasDinheiro;
+  const diferenca = novoValor - saldoEsperado;
+  
+  if (!estado.diferencas) estado.diferencas = {};
+  estado.diferencas[dataSel] = { esperado: saldoEsperado, real: novoValor, diferenca: diferenca };
+  
+  salvar();
+  render();
+  renderCaderninho();
+  if (navigator.onLine) sincronizarDadosCompletos();
+  
+  toast('✅ Fechamento corrigido: ' + BRL.format(novoValor));
+}
 /* =================== INICIALIZAÇÃO =================== */
+carregarCaderninho();
 document.getElementById('dataSel').value = dataSel;
+
 render();
 document.getElementById('valor').focus();
 atualizaOlho();
