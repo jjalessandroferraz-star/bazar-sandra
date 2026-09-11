@@ -1,3 +1,19 @@
+<!-- 
+  ═══════════════════════════════════════════════════════════════
+  SISTEMA DE CAIXA - BAZAR SANDRA
+  Versão: 2.0 (Corrigido)
+  Data: 2026-09-11
+  ═══════════════════════════════════════════════════════════════
+  
+  CORREÇÕES APLICADAS:
+  1. Fechamento não contamina datas erradas
+  2. Busca último fechamento anterior (não só ontem)
+  3. Corrigir fechamento de dias passados funciona
+  4. Sincronização completa com Firebase
+  5. Caderninho sincronizado (empréstimos, recebidos, obs)
+  6. Layout reorganizado (fechamentos à esquerda, anotações à direita)
+  ═══════════════════════════════════════════════════════════════
+-->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -300,12 +316,12 @@
 
   <div class="tabbar">
     <button id="tabBtnCaixa" class="on" data-page="caixa">🧾 Caixa do dia</button>
-    <button id="tabBtnBases" data-page="bases">📚 Bases & Backup</button>
+    <button id="tabBtnFechamento" data-page="fechamento">📒 Fechamento Diário</button>
     <button id="tabBtnRel" data-page="relatorios">📊 Relatórios</button>
-<button id="tabBtnFechamento" data-page="fechamento">📒 Fechamento Diário</button>
-
+    <button id="tabBtnBases" data-page="bases">📚 Bases & Backup</button>
   </div>
 
+  <!-- ═══════════════ ABA: CAIXA DO DIA ═══════════════ -->
   <div class="page on" id="pageCaixa">
     <div class="painel">
       <div class="col">
@@ -360,7 +376,7 @@
           </div>
           <div class="totais">
             <div class="trow" style="background:rgba(255,255,255,.08); border-radius:12px; margin:8px; padding:15px;">
-              <div class="t"><span class="sq" style="background:var(--gold)"></span>Dinheiro em Caixa (ontem)</div>
+              <div class="t" id="labelCaixaAnterior"><span class="sq" style="background:var(--gold)"></span>Dinheiro em Caixa (ontem)</div>
               <div class="amt num" id="dinheiroCaixaAnterior" style="color:var(--gold); cursor:pointer;" onclick="editarCaixaAnterior()" title="Clique para editar">R$ 0,00</div>
             </div>
             <div class="trow"><div class="t"><span class="sq" style="background:var(--pos)"></span>Entradas</div><div class="amt pos num" id="totEnt">R$ 0,00</div></div>
@@ -375,7 +391,7 @@
           <div style="background:rgba(255,255,255,.08); border:2px solid #E8A838; border-radius:16px; margin:12px; padding:16px; position:relative; z-index:1;">
             <h3 style="margin:0 0 12px; font-family:var(--disp); color:var(--gold); font-size:16px; text-align:center;">🔒 Fechamento de Dinheiro</h3>
             <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.15); background:rgba(232,168,56,.1); border-radius:8px; margin-bottom:4px;">
-              <span style="color:#F4C542; font-weight:700; font-size:14px;">🏦 Caixa em dinheiro de Ontem</span>
+              <span style="color:#F4C542; font-weight:700; font-size:14px;" id="labelFechAnterior">🏦 Fechamento anterior</span>
               <span id="fechCaixaAnterior" style="font-family:var(--disp); font-weight:700; font-size:18px; color:#F4C542;">R$ 0,00</span>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.15);">
@@ -404,10 +420,124 @@
     </div>
   </div>
 
+  <!-- ═══════════════ ABA: FECHAMENTO DIÁRIO ═══════════════ -->
+  <div class="page" id="pageFechamento">
+    <div class="painel">
+      <div class="col">
+        <div class="card">
+          <div class="head">
+            <h2>📅 Fechamentos de todos os dias</h2>
+            <select id="filtroMesCaderno" class="relsel" onchange="renderCaderninho()" style="max-width:150px;"></select>
+          </div>
+          <div class="body"><div id="historicoCaderno"></div></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card dark">
+          <div class="head"><h2>📊 Resumo do dia</h2></div>
+          <div class="body">
+            <div class="trow" style="border-bottom:1px solid rgba(255,255,255,.15);">
+              <div class="t">📅 Data</div>
+              <div class="amt" id="fechDataCaderno" style="font-size:16px;">—</div>
+            </div>
+            <div class="trow"><div class="t">💰 Fechamento oficial</div><div class="amt pos" id="resumoFechamento">R$ 0,00</div></div>
+            <div class="trow"><div class="t">💸 Emprestado</div><div class="amt neg" id="resumoEmprestado">R$ 0,00</div></div>
+            <div class="trow"><div class="t">💳 Recebido</div><div class="amt pos" id="resumoRecebido">R$ 0,00</div></div>
+            <div class="trow saldo"><div class="t">🏦 Saldo real</div><div class="amt" id="resumoSaldoReal">R$ 0,00</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="head"><h2>📝 Anotações do dia</h2></div>
+          <div class="body">
+            <div style="background:#FFF8E1; border:2px dashed #E8A838; border-radius:12px; padding:12px; margin-bottom:15px;">
+              <label style="font-weight:700; color:var(--wine); display:block; margin-bottom:8px;">💰 Corrigir valor do fechamento</label>
+              <div class="saida-row">
+                <input id="fechValorCaderno" inputmode="decimal" placeholder="R$ 0,00" style="width:140px; font-weight:700;">
+                <button id="btnCorrigirFechamento" style="background:var(--gold); color:#4a2d00;">✓ Corrigir</button>
+              </div>
+            </div>
+
+            <div class="saida-box" style="border-color:#4CAF50; background:#F0F7F1;">
+              <h3 style="color:#2E7D32;">💸 Dinheiro emprestado</h3>
+              <div class="saida-row">
+                <input id="emprestimoValor" inputmode="decimal" placeholder="R$ 0,00" style="width:140px;">
+                <input id="emprestimoPessoa" placeholder="Para quem?" style="flex:1;">
+                <button id="btnAddEmprestimo" style="background:var(--green);">+ Adicionar</button>
+              </div>
+              <div id="listaEmprestimos" style="margin-top:10px;"></div>
+            </div>
+
+            <div class="saida-box" style="border-color:#FF9800; background:#FFF8E1;">
+              <h3 style="color:#E65100;">💳 Dinheiro recebido</h3>
+              <div class="saida-row">
+                <input id="recebidoValor" inputmode="decimal" placeholder="R$ 0,00" style="width:140px;">
+                <input id="recebidoPessoa" placeholder="De quem?" style="flex:1;">
+                <button id="btnAddRecebido" style="background:#FF9800;">+ Adicionar</button>
+              </div>
+              <div id="listaRecebidos" style="margin-top:10px;"></div>
+            </div>
+
+            <div style="margin-top:15px;">
+              <label style="font-weight:700; color:var(--wine);">📝 Observações gerais</label>
+              <textarea id="obsGerais" rows="3" style="width:100%; border:2px solid var(--line); border-radius:12px; padding:10px; font-family:var(--body); font-size:14px; margin-top:8px;" placeholder="Anotações sobre o dia..."></textarea>
+            </div>
+            <button class="btn green" id="btnSalvarCaderno" style="width:100%; margin-top:10px; justify-content:center;">💾 Salvar Anotações</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ ABA: RELATÓRIOS ═══════════════ -->
+  <div class="page" id="pageRelatorios">
+    <div class="card" style="margin-bottom:18px">
+      <div class="head">
+        <h2>📊 Visão Geral</h2>
+        <button class="eye lt" id="btnEye2" title="Mostrar/ocultar valores"><svg id="eyeIcon2" viewBox="0 0 24 24"></svg></button>
+      </div>
+      <div class="body">
+        <div class="segbar">
+          <div class="seg" id="segView">
+            <button data-view="dia" class="on">📅 Diário</button>
+            <button data-view="semana">📆 Semana</button>
+            <button data-view="mes">🗓️ Mensal</button>
+            <button data-view="ano">📊 Anual</button>
+          </div>
+          <select id="relPeriodo" class="relsel"></select>
+        </div>
+        <div class="kgrid" id="relKpis"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:18px">
+      <div class="head"><h2>💰 Ganhos × Gastos</h2><span style="font-size:12px;color:var(--muted);">Valores em R$</span></div>
+      <div class="body"><div class="chartbox" id="ggBox" style="min-height:280px;"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><div class="head"><h2>💳 Como entra o dinheiro</h2></div><div class="body"><div class="chartbox sm" id="formaBox"></div></div></div>
+      <div class="card"><div class="head"><h2>📅 Dias que mais vendem</h2></div><div class="body"><div class="chartbox sm" id="dowBox"></div></div></div>
+    </div>
+    <div class="card" style="margin-top:18px; border-color:#FF9800;">
+      <div class="head" style="background:linear-gradient(to right, #FFF3E0 0%, #FFF 100%); border-bottom:3px solid #FF9800;">
+        <h2 style="color:#E65100;">⚠️ Sobras de Dinheiro — Vendas não marcadas</h2>
+      </div>
+      <div class="body"><div class="chartbox" id="sobrasBox" style="min-height:250px;"></div><div id="sobrasResumo" style="margin-top:10px;"></div></div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <div class="head"><h2>🔍 Detalhamento de Diferenças</h2></div>
+      <div class="body"><div id="relDiferencas"></div></div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <div class="head"><h2>💡 O que os números dizem</h2></div>
+      <div class="body"><ul class="insights" id="relInsights"></ul></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ ABA: BASES & BACKUP ═══════════════ -->
   <div class="page" id="pageBases">
     <div class="sync-card">
       <h3>🔄 Sincronização com Firebase</h3>
-      <p class="cap" style="margin-bottom:16px;">Seus dados são salvos na nuvem.</p>
+      <p class="cap" style="margin-bottom:16px;">Seus dados são salvos na nuvem automaticamente.</p>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button onclick="sincronizarDadosCompletos()" class="btn prim">🔄 Sincronizar Agora</button>
         <button onclick="carregarDoGoogle()" class="btn">📥 Carregar da Nuvem</button>
@@ -463,129 +593,14 @@
     </div>
   </div>
 
-  <div class="page" id="pageRelatorios">
-    <div class="card" style="margin-bottom:18px">
-      <div class="head">
-        <h2>📊 Visão Geral</h2>
-        <button class="eye lt" id="btnEye2" title="Mostrar/ocultar valores"><svg id="eyeIcon2" viewBox="0 0 24 24"></svg></button>
-      </div>
-      <div class="body">
-        <div class="segbar">
-          <div class="seg" id="segView">
-            <button data-view="dia" class="on">📅 Diário</button>
-            <button data-view="semana">📆 Semana</button>
-            <button data-view="mes">🗓️ Mensal</button>
-            <button data-view="ano">📊 Anual</button>
-          </div>
-          <select id="relPeriodo" class="relsel"></select>
-        </div>
-        <div class="kgrid" id="relKpis"></div>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:18px">
-      <div class="head"><h2>💰 Ganhos × Gastos</h2><span style="font-size:12px;color:var(--muted);">Valores em R$</span></div>
-      <div class="body"><div class="chartbox" id="ggBox" style="min-height:280px;"></div></div>
-    </div>
-    <div class="grid2">
-      <div class="card"><div class="head"><h2>💳 Como entra o dinheiro</h2></div><div class="body"><div class="chartbox sm" id="formaBox"></div></div></div>
-      <div class="card"><div class="head"><h2>📅 Dias que mais vendem</h2></div><div class="body"><div class="chartbox sm" id="dowBox"></div></div></div>
-    </div>
-    <div class="card" style="margin-top:18px; border-color:#FF9800;">
-      <div class="head" style="background:linear-gradient(to right, #FFF3E0 0%, #FFF 100%); border-bottom:3px solid #FF9800;">
-        <h2 style="color:#E65100;">⚠️ Sobras de Dinheiro — Vendas não marcadas</h2>
-      </div>
-      <div class="body"><div class="chartbox" id="sobrasBox" style="min-height:250px;"></div><div id="sobrasResumo" style="margin-top:10px;"></div></div>
-    </div>
-    <div class="card" style="margin-top:18px">
-      <div class="head"><h2>🔍 Detalhamento de Diferenças</h2></div>
-      <div class="body"><div id="relDiferencas"></div></div>
-    </div>
-    <div class="card" style="margin-top:18px">
-      <div class="head"><h2>💡 O que os números dizem</h2></div>
-      <div class="body"><ul class="insights" id="relInsights"></ul></div>
-    </div>
-  </div>
-
   <div class="center"><div class="savenote" id="savenote"></div></div>
 </div>
-<div class="page" id="pageFechamento">
-  <div class="painel">
-    <!-- ESQUERDA: FECHAMENTOS DE TODOS OS DIAS -->
-    <div class="col">
-      <div class="card">
-        <div class="head">
-          <h2>📅 Fechamentos de todos os dias</h2>
-          <select id="filtroMesCaderno" class="relsel" onchange="renderCaderninho()" style="max-width:150px;"></select>
-        </div>
-        <div class="body"><div id="historicoCaderno"></div></div>
-      </div>
-    </div>
-
-    <!-- DIREITA: RESUMO + ANOTAÇÕES -->
-    <div class="col">
-      <div class="card dark">
-        <div class="head"><h2>📊 Resumo do dia</h2></div>
-        <div class="body">
-          <div class="trow" style="border-bottom:1px solid rgba(255,255,255,.15);">
-            <div class="t">📅 Data</div>
-            <div class="amt" id="fechDataCaderno" style="font-size:16px;">—</div>
-          </div>
-          <div class="trow"><div class="t">💰 Fechamento oficial</div><div class="amt pos" id="resumoFechamento">R$ 0,00</div></div>
-          <div class="trow"><div class="t">💸 Emprestado</div><div class="amt neg" id="resumoEmprestado">R$ 0,00</div></div>
-          <div class="trow"><div class="t">💳 Recebido</div><div class="amt pos" id="resumoRecebido">R$ 0,00</div></div>
-          <div class="trow saldo"><div class="t">🏦 Saldo real</div><div class="amt" id="resumoSaldoReal">R$ 0,00</div></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="head"><h2>📝 Anotações do dia</h2></div>
-        <div class="body">
-          <!-- CORRIGIR FECHAMENTO -->
-          <div style="background:#FFF8E1; border:2px dashed #E8A838; border-radius:12px; padding:12px; margin-bottom:15px;">
-            <label style="font-weight:700; color:var(--wine); display:block; margin-bottom:8px;">💰 Corrigir valor do fechamento</label>
-            <div class="saida-row">
-              <input id="fechValorCaderno" inputmode="decimal" placeholder="R$ 0,00" style="width:140px; font-weight:700;">
-              <button id="btnCorrigirFechamento" style="background:var(--gold); color:#4a2d00;">✓ Corrigir</button>
-            </div>
-          </div>
-
-          <!-- EMPRÉSTIMOS -->
-          <div class="saida-box" style="border-color:#4CAF50; background:#F0F7F1;">
-            <h3 style="color:#2E7D32;">💸 Dinheiro emprestado</h3>
-            <div class="saida-row">
-              <input id="emprestimoValor" inputmode="decimal" placeholder="R$ 0,00" style="width:140px;">
-              <input id="emprestimoPessoa" placeholder="Para quem?" style="flex:1;">
-              <button id="btnAddEmprestimo" style="background:var(--green);">+ Adicionar</button>
-            </div>
-            <div id="listaEmprestimos" style="margin-top:10px;"></div>
-          </div>
-
-          <!-- RECEBIDOS -->
-          <div class="saida-box" style="border-color:#FF9800; background:#FFF8E1;">
-            <h3 style="color:#E65100;">💳 Dinheiro recebido</h3>
-            <div class="saida-row">
-              <input id="recebidoValor" inputmode="decimal" placeholder="R$ 0,00" style="width:140px;">
-              <input id="recebidoPessoa" placeholder="De quem?" style="flex:1;">
-              <button id="btnAddRecebido" style="background:#FF9800;">+ Adicionar</button>
-            </div>
-            <div id="listaRecebidos" style="margin-top:10px;"></div>
-          </div>
-
-          <!-- OBSERVAÇÕES -->
-          <div style="margin-top:15px;">
-            <label style="font-weight:700; color:var(--wine);">📝 Observações gerais</label>
-            <textarea id="obsGerais" rows="3" style="width:100%; border:2px solid var(--line); border-radius:12px; padding:10px; font-family:var(--body); font-size:14px; margin-top:8px;" placeholder="Anotações sobre o dia..."></textarea>
-          </div>
-          <button class="btn green" id="btnSalvarCaderno" style="width:100%; margin-top:10px; justify-content:center;">💾 Salvar Anotações</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-         
+<div class="toast" id="toast"></div>
 
 <script>
-/* =================== LOGIN =================== */
+/* ══════════════════════════════════════════════════════════════
+   LOGIN
+   ══════════════════════════════════════════════════════════════ */
 function verificarSenha() {
   var senha = document.getElementById('senhaInput').value;
   if (senha === 'sandra2024') {
@@ -601,82 +616,88 @@ document.getElementById('senhaInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') verificarSenha();
 });
 
+/* ══════════════════════════════════════════════════════════════
+   VERIFICAÇÃO DO INÍCIO DO DIA
+   ⚠️ CORRIGIDO: NÃO salva valor em data errada!
+   ══════════════════════════════════════════════════════════════ */
 function verificarInicioDoDia() {
   if (dataSel !== hojeISO()) return;
   
-  // Calcula a data de ontem corretamente
+  const confirmacaoHoje = localStorage.getItem('confirmacao_caixa_' + hojeISO());
+  if (confirmacaoHoje) return;
+  
   const ontem = new Date();
-  ontem.setHours(12, 0, 0, 0); // Define meio-dia para evitar problemas de fuso
+  ontem.setHours(12, 0, 0, 0);
   ontem.setDate(ontem.getDate() - 1);
   const ontemISO = ontem.getFullYear() + '-' + 
                    String(ontem.getMonth() + 1).padStart(2, '0') + '-' + 
                    String(ontem.getDate()).padStart(2, '0');
   
   const fechamentoOntem = estado.fechamentos?.[ontemISO];
-  const confirmacaoHoje = localStorage.getItem('confirmacao_caixa_' + hojeISO());
-  
-  if (confirmacaoHoje) return;
   
   if (fechamentoOntem !== undefined && fechamentoOntem !== null) {
+    // ✅ Existe fechamento → apenas confirma ou corrige ontem
     const valorOntem = typeof fechamentoOntem === 'object' ? fechamentoOntem.valor : fechamentoOntem;
     
     const confirmar = confirm(
       '🌅 Bom dia!\n\n' +
-      'O fechamento do dia anterior (' + fmtBR(ontemISO) + ') foi:\n\n' +
+      'O fechamento de ontem (' + fmtBR(ontemISO) + ') foi:\n\n' +
       '💰 ' + BRL.format(valorOntem) + '\n\n' +
-      'Este valor está correto?\n\n' +
+      'Está correto?\n\n' +
       'OK = Confirmar\n' +
-      'Cancelar = Editar valor'
+      'Cancelar = Corrigir valor'
     );
     
     if (!confirmar) {
       const novoValor = prompt(
-        'Digite o valor CORRETO do fechamento do dia anterior (' + fmtBR(ontemISO) + '):',
+        'Digite o valor CORRETO do fechamento de ' + fmtBR(ontemISO) + ':',
         valorOntem.toFixed(2).replace('.', ',')
       );
       
       if (novoValor !== null) {
         const valor = parseValor(novoValor);
         if (!isNaN(valor) && valor >= 0) {
-          if (!estado.fechamentos) estado.fechamentos = {};
           estado.fechamentos[ontemISO] = valor;
           salvar();
           render();
           if (navigator.onLine) sincronizarDadosCompletos();
-          toast('✅ Fechamento atualizado: ' + BRL.format(valor));
+          toast('✅ Fechamento de ontem corrigido: ' + BRL.format(valor));
         }
       }
     } else {
-      toast('✅ Fechamento confirmado: ' + BRL.format(valorOntem));
+      toast('✅ Fechamento de ontem confirmado');
     }
   } else {
-    const configurar = confirm(
+    // ⚠️ NÃO existe fechamento ontem → APENAS avisa, NÃO salva
+    const abrir = confirm(
       '🌅 Bom dia!\n\n' +
-      'Não foi registrado o fechamento do dia anterior (' + fmtBR(ontemISO) + ').\n\n' +
-      'Deseja informar o valor agora?\n\n' +
-      'OK = Sim\n' +
-      'Cancelar = Continuar com R$ 0,00'
+      '⚠️ Não há fechamento registrado para ontem (' + fmtBR(ontemISO) + ').\n\n' +
+      'Para corrigir, use a aba "📒 Fechamento Diário",\n' +
+      'selecione a data ' + fmtBR(ontemISO) + ' e clique em "✓ Corrigir".\n\n' +
+      'Deseja abrir essa aba agora?'
     );
     
-    if (configurar) {
-      const novoValor = prompt('Digite o valor do fechamento (' + fmtBR(ontemISO) + '):', '0,00');
-      if (novoValor !== null) {
-        const valor = parseValor(novoValor);
-        if (!isNaN(valor) && valor >= 0) {
-          if (!estado.fechamentos) estado.fechamentos = {};
-          estado.fechamentos[ontemISO] = valor;
-          salvar();
-          render();
-          if (navigator.onLine) sincronizarDadosCompletos();
-          toast('✅ Fechamento definido: ' + BRL.format(valor));
-        }
-      }
+    if (abrir) {
+      dataSel = ontemISO;
+      document.getElementById('dataSel').value = ontemISO;
+      document.querySelectorAll('.tabbar button').forEach(x => {
+        x.classList.toggle('on', x.dataset.page === 'fechamento');
+      });
+      document.getElementById('pageCaixa').classList.remove('on');
+      document.getElementById('pageBases').classList.remove('on');
+      document.getElementById('pageRelatorios').classList.remove('on');
+      document.getElementById('pageFechamento').classList.add('on');
+      render();
+      renderCaderninho();
     }
   }
   
   localStorage.setItem('confirmacao_caixa_' + hojeISO(), 'confirmado');
 }
-/* =================== CONFIGURAÇÃO =================== */
+
+/* ══════════════════════════════════════════════════════════════
+   CONFIGURAÇÃO
+   ══════════════════════════════════════════════════════════════ */
 const CHAVE = 'caixa_bazar_sandra_v1';
 const firebaseConfig = {
   apiKey: "AIzaSyC1zKE-XUFR6mVm4aLNYW9SIFDjMldI7ts",
@@ -691,11 +712,14 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 let estado = {movimentos:[], nome:'Bazar Sandra Presentes', sheetUrl:'', ultimoEnvio:'', taxaDeb:'1.5', taxaCred:'3.5', fechamentos:{}, diferencas:{}};
+let caderninho = {};
 let dataSel = hojeISO();
 let filtro = 'tudo';
 let mostrarValores = false;
 
-/* =================== TOAST =================== */
+/* ══════════════════════════════════════════════════════════════
+   TOAST
+   ══════════════════════════════════════════════════════════════ */
 let _t = null;
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -706,7 +730,9 @@ function toast(msg) {
   _t = setTimeout(function() { if (t) t.classList.remove('show'); }, 2400);
 }
 
-/* =================== UTILIDADES =================== */
+/* ══════════════════════════════════════════════════════════════
+   UTILIDADES
+   ══════════════════════════════════════════════════════════════ */
 const BRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const CORES = {Dinheiro:'#2E7D32', Pix:'#12A5A5', 'Débito':'#457B9D', 'Crédito':'#E7A924', 'Crédito Parcelado':'#DAA520', Ficha:'#9C27B0', Outros:'#94A3B8'};
 const FORMAS = ['Dinheiro','Pix','Débito','Crédito','Crédito Parcelado','Ficha'];
@@ -720,72 +746,111 @@ function normalizarForma(f){ f=(''+f).toLowerCase(); if(f.includes('pix')) retur
 function id(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function escapar(s){ return (''+(s||'')).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-/* =================== STORAGE =================== */
-function carregar(){ try{ const s=localStorage.getItem(CHAVE); return s?JSON.parse(s):{movimentos:[], nome:'Bazar Sandra Presentes', sheetUrl:'', ultimoEnvio:'', taxaDeb:'1.5', taxaCred:'3.5', fechamentos:{}, diferencas:{}}; } catch(e){ return {movimentos:[], nome:'Bazar Sandra Presentes', sheetUrl:'', ultimoEnvio:'', taxaDeb:'1.5', taxaCred:'3.5', fechamentos:{}, diferencas:{}}; } }
+/* ══════════════════════════════════════════════════════════════
+   STORAGE
+   ══════════════════════════════════════════════════════════════ */
+function carregar(){ 
+  try{ 
+    const s=localStorage.getItem(CHAVE); 
+    return s?JSON.parse(s):{movimentos:[], nome:'Bazar Sandra Presentes', sheetUrl:'', ultimoEnvio:'', taxaDeb:'1.5', taxaCred:'3.5', fechamentos:{}, diferencas:{}}; 
+  } catch(e){ 
+    return {movimentos:[], nome:'Bazar Sandra Presentes', sheetUrl:'', ultimoEnvio:'', taxaDeb:'1.5', taxaCred:'3.5', fechamentos:{}, diferencas:{}}; 
+  } 
+}
 function salvar(){ try{ localStorage.setItem(CHAVE, JSON.stringify(estado)); }catch(e){} }
 estado = carregar();
 
-/* =================== CAIXA DO DIA ANTERIOR =================== */
-function dataAnteriorISO() {
-  // Usar T12:00:00 para evitar problemas de fuso horário
-  const d = new Date(dataSel + 'T12:00:00');
-  d.setDate(d.getDate() - 1);
-  // Formatar manualmente para YYYY-MM-DD
-  const ano = d.getFullYear();
-  const mes = String(d.getMonth() + 1).padStart(2, '0');
-  const dia = String(d.getDate()).padStart(2, '0');
-  return `${ano}-${mes}-${dia}`;
+/* ══════════════════════════════════════════════════════════════
+   CAIXA ANTERIOR - ⚠️ CORRIGIDO
+   Busca o ÚLTIMO fechamento REGISTRADO antes da data atual
+   ══════════════════════════════════════════════════════════════ */
+function obterDataUltimoFechamento() {
+  const datas = Object.keys(estado.fechamentos || {})
+    .filter(d => d < dataSel)
+    .sort()
+    .reverse();
+  
+  if (datas.length === 0) return null;
+  return datas[0];
 }
 
 function obterCaixaAnterior() {
-  const chave = dataAnteriorISO();
-  const valor = estado.fechamentos?.[chave];
-  // Se for número, retorna; se for objeto, retorna .valor
+  const dataUltimo = obterDataUltimoFechamento();
+  if (!dataUltimo) return 0;
+  
+  const valor = estado.fechamentos[dataUltimo];
   if (typeof valor === 'number') return valor;
   if (valor && typeof valor === 'object') return valor.valor || 0;
   return 0;
 }
+
 function editarCaixaAnterior() {
-  const ontemISO = dataAnteriorISO();
+  const dataUltimo = obterDataUltimoFechamento();
+  if (!dataUltimo) {
+    toast('⚠️ Não há fechamento anterior para editar');
+    return;
+  }
+  
   const valorAtual = obterCaixaAnterior();
-  const novoValor = prompt('💰 Dinheiro em caixa do dia anterior (' + fmtBR(ontemISO) + '):', valorAtual.toFixed(2).replace('.', ','));
+  const novoValor = prompt('💰 Corrigir fechamento de ' + fmtBR(dataUltimo) + ':', valorAtual.toFixed(2).replace('.', ','));
   if (novoValor === null) return;
   const valor = parseValor(novoValor);
   if (isNaN(valor) || valor < 0) { toast('⚠️ Valor inválido!'); return; }
-  if (!estado.fechamentos) estado.fechamentos = {};
-  estado.fechamentos[ontemISO] = valor;
+  
+  estado.fechamentos[dataUltimo] = valor;
   salvar(); render();
-  toast('✅ Caixa anterior: ' + BRL.format(valor));
+  if (navigator.onLine) sincronizarDadosCompletos();
+  toast('✅ Fechamento de ' + fmtBR(dataUltimo) + ' atualizado: ' + BRL.format(valor));
 }
 
-/* =================== CONFIRMAR FECHAMENTO =================== */
+/* ══════════════════════════════════════════════════════════════
+   CONFIRMAR FECHAMENTO (do dia atual)
+   ══════════════════════════════════════════════════════════════ */
 function confirmarFechamento() {
   const caixaAnterior = obterCaixaAnterior();
   const dia = estado.movimentos.filter(m => m.data === dataSel);
   const entradasDinheiro = dia.filter(m => m.tipo === 'entrada' && m.forma === 'Dinheiro').reduce((a,b) => a + b.valor, 0);
   const saidasDinheiro = dia.filter(m => m.tipo === 'saida' && m.forma === 'Dinheiro').reduce((a,b) => a + b.valor, 0);
   const saldoEsperado = caixaAnterior + entradasDinheiro - saidasDinheiro;
-  const valorReal = prompt('🔒 FECHAMENTO DE CAIXA - ' + fmtBR(dataSel) + '\n\n💰 Caixa anterior: ' + BRL.format(caixaAnterior) + '\n📥 Entradas: ' + BRL.format(entradasDinheiro) + '\n📤 Saídas: ' + BRL.format(saidasDinheiro) + '\n📌 Saldo esperado: ' + BRL.format(saldoEsperado) + '\n\nDigite o valor REAL em caixa:', saldoEsperado.toFixed(2).replace('.', ','));
+  
+  const valorReal = prompt(
+    '🔒 FECHAMENTO DE CAIXA - ' + fmtBR(dataSel) + '\n\n' +
+    '💰 Caixa anterior: ' + BRL.format(caixaAnterior) + '\n' +
+    '📥 Entradas: ' + BRL.format(entradasDinheiro) + '\n' +
+    '📤 Saídas: ' + BRL.format(saidasDinheiro) + '\n' +
+    '📌 Saldo esperado: ' + BRL.format(saldoEsperado) + '\n\n' +
+    'Digite o valor REAL em caixa:',
+    saldoEsperado.toFixed(2).replace('.', ',')
+  );
+  
   if (valorReal === null) return;
   const valor = parseValor(valorReal);
   if (isNaN(valor) || valor < 0) { toast('⚠️ Valor inválido!'); return; }
+  
   const diferenca = valor - saldoEsperado;
+  
   if (!estado.fechamentos) estado.fechamentos = {};
   estado.fechamentos[dataSel] = valor;
+  
   if (!estado.diferencas) estado.diferencas = {};
   estado.diferencas[dataSel] = { esperado: saldoEsperado, real: valor, diferenca: diferenca };
+  
   salvar(); render();
-  if (navigator.onLine) sincronizarDadosCompletos(); // ✅ ADICIONADO
+  if (navigator.onLine) sincronizarDadosCompletos();
+  
   if (diferenca === 0) toast('✅ Caixa fechado sem diferença!');
   else if (diferenca > 0) toast('⚠️ Sobra de ' + BRL.format(diferenca) + ' no caixa!');
   else toast('❌ Falta de ' + BRL.format(Math.abs(diferenca)) + ' no caixa!');
+  
   document.getElementById('fechMsg').style.display = 'block';
   document.getElementById('btnFechar').disabled = true;
   document.getElementById('btnFechar').style.opacity = '0.6';
   document.getElementById('btnEditarFechar').style.display = 'block';
 }
 
-/* =================== EDITAR FECHAMENTO =================== */
+/* ══════════════════════════════════════════════════════════════
+   EDITAR FECHAMENTO (do dia atual)
+   ══════════════════════════════════════════════════════════════ */
 function editarFechamento() {
   const dia = estado.movimentos.filter(m => m.data === dataSel);
   const entradasDinheiro = dia.filter(m => m.tipo === 'entrada' && m.forma === 'Dinheiro').reduce((a,b) => a + b.valor, 0);
@@ -793,36 +858,71 @@ function editarFechamento() {
   const caixaAnterior = obterCaixaAnterior();
   const saldoEsperado = caixaAnterior + entradasDinheiro - saidasDinheiro;
   const valorAtual = estado.fechamentos?.[dataSel] || saldoEsperado;
-  const novoValor = prompt('✏️ EDITAR FECHAMENTO...', valorAtual.toFixed(2).replace('.', ','));
+  
+  const novoValor = prompt(
+    '✏️ EDITAR FECHAMENTO - ' + fmtBR(dataSel) + '\n\n' +
+    'Valor atual: ' + BRL.format(valorAtual) + '\n' +
+    'Saldo esperado: ' + BRL.format(saldoEsperado) + '\n\n' +
+    'Digite o novo valor:',
+    valorAtual.toFixed(2).replace('.', ',')
+  );
+  
   if (novoValor === null) return;
   const valor = parseValor(novoValor);
   if (isNaN(valor) || valor < 0) { toast('⚠️ Valor inválido!'); return; }
+  
   const diferenca = valor - saldoEsperado;
+  
   if (!estado.fechamentos) estado.fechamentos = {};
   estado.fechamentos[dataSel] = valor;
+  
   if (!estado.diferencas) estado.diferencas = {};
   estado.diferencas[dataSel] = { esperado: saldoEsperado, real: valor, diferenca: diferenca };
+  
   salvar(); render();
-  if (navigator.onLine) sincronizarDadosCompletos(); // ✅ ADICIONADO
+  if (navigator.onLine) sincronizarDadosCompletos();
   toast('✅ Fechamento atualizado! Diferença: ' + BRL.format(diferenca));
 }
 
-/* =================== SISTEMA COMPLETO DE SINCRONIZAÇÃO =================== */
-let syncStatus = { ultimaSync: null, ultimoErro: null, pendentes: 0, sincronizando: false, ultimoHashLocal: null, ultimoHashRemoto: null };
+/* ══════════════════════════════════════════════════════════════
+   SINCRONIZAÇÃO COMPLETA
+   ══════════════════════════════════════════════════════════════ */
+let syncStatus = { ultimaSync: null, ultimoErro: null, pendentes: 0, sincronizando: false, ultimoHashLocal: null };
+
 function atualizarIndicadorSync(status, texto) {
   const ind = document.getElementById('syncIndicador');
   if (!ind) return;
   ind.className = 'sync-indicador ' + (status || 'sync-ok');
   ind.innerHTML = '<span class="dot"></span> ' + (texto || 'Online');
 }
-function gerarHash(dados) { const str = JSON.stringify(dados); let hash = 0; for (let i = 0; i < str.length; i++) { const char = str.charCodeAt(i); hash = ((hash << 5) - hash) + char; hash = hash & hash; } return hash.toString(); }
-function precisaSincronizar() { const hashLocal = gerarHash(estado.movimentos); return hashLocal !== syncStatus.ultimoHashLocal; }
+
+function gerarHash(dados) { 
+  const str = JSON.stringify(dados); 
+  let hash = 0; 
+  for (let i = 0; i < str.length; i++) { 
+    const char = str.charCodeAt(i); 
+    hash = ((hash << 5) - hash) + char; 
+    hash = hash & hash; 
+  } 
+  return hash.toString(); 
+}
+
+function precisaSincronizar() { 
+  const hashLocal = gerarHash({
+    mov: estado.movimentos,
+    fech: estado.fechamentos,
+    dif: estado.diferencas,
+    cad: caderninho
+  });
+  return hashLocal !== syncStatus.ultimoHashLocal; 
+}
 
 async function sincronizarDadosCompletos() {
   if (!navigator.onLine) { atualizarIndicadorSync('sync-offline', 'Offline'); return; }
   if (syncStatus.sincronizando) return;
   syncStatus.sincronizando = true;
   atualizarIndicadorSync('sync-sincronizando', 'Sincronizando...');
+  
   try {
     // SALVAR MOVIMENTOS POR MÊS
     const movimentosPorMes = {};
@@ -831,6 +931,7 @@ async function sincronizarDadosCompletos() {
       if (!movimentosPorMes[mes]) movimentosPorMes[mes] = []; 
       movimentosPorMes[mes].push(m); 
     });
+    
     for (const mes of Object.keys(movimentosPorMes)) {
       await db.collection('caixa').doc('dados_' + mes).set({ 
         movimentos: movimentosPorMes[mes], 
@@ -842,7 +943,13 @@ async function sincronizarDadosCompletos() {
     }
 
     // SALVAR METADADOS
-    const hashLocal = gerarHash(estado.movimentos);
+    const hashLocal = gerarHash({
+      mov: estado.movimentos,
+      fech: estado.fechamentos,
+      dif: estado.diferencas,
+      cad: caderninho
+    });
+    
     await db.collection('caixa').doc('metadados').set({ 
       nome: estado.nome, 
       meses: Object.keys(movimentosPorMes), 
@@ -875,7 +982,9 @@ async function sincronizarDadosCompletos() {
     console.error('❌ Erro:', erro); 
     syncStatus.ultimoErro = erro.message; 
     syncStatus.pendentes++; 
-    atualizarIndicadorSync('sync-erro', 'Erro'); 
+    atualizarIndicadorSync('sync-erro', 'Erro');
+    // Retry em 15 segundos
+    setTimeout(() => { if (navigator.onLine) sincronizarDadosCompletos(); }, 15000);
   }
   finally { 
     syncStatus.sincronizando = false; 
@@ -885,13 +994,20 @@ async function sincronizarDadosCompletos() {
 function mostrarStatusSync() {
   const box = document.getElementById('syncStatus');
   if (!box) return;
-  box.innerHTML = `<div style="display:grid; gap:8px;"><div><b>Status:</b> ${navigator.onLine ? '🟢 Online' : '🔴 Offline'}</div><div><b>Firebase:</b> ✅ Configurado</div><div><b>Total de movimentos:</b> ${estado.movimentos.length}</div></div>`;
+  box.innerHTML = `<div style="display:grid; gap:8px;">
+    <div><b>Status:</b> ${navigator.onLine ? '🟢 Online' : '🔴 Offline'}</div>
+    <div><b>Firebase:</b> ✅ Configurado</div>
+    <div><b>Movimentos:</b> ${estado.movimentos.length}</div>
+    <div><b>Fechamentos:</b> ${Object.keys(estado.fechamentos || {}).length}</div>
+    <div><b>Caderninho:</b> ${Object.keys(caderninho || {}).length} dias</div>
+  </div>`;
 }
 
 async function carregarDoGoogle() {
   if (!navigator.onLine) { toast('⚠️ Sem conexão'); return; }
   syncStatus.sincronizando = true; 
   atualizarIndicadorSync('sync-sincronizando', 'Carregando...');
+  
   try {
     const metadadosDoc = await db.collection('caixa').doc('metadados').get();
     if (!metadadosDoc.exists) { await sincronizarDadosCompletos(); return; }
@@ -943,7 +1059,6 @@ async function carregarDoGoogle() {
 }
 
 function iniciarSyncAutomatico() {
-  console.log('🔄 Iniciando sincronização automática...');
   setTimeout(() => { if (navigator.onLine) carregarDoGoogle(); }, 2000);
   setInterval(() => { if (navigator.onLine && precisaSincronizar()) sincronizarDadosCompletos(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine) carregarDoGoogle(); });
@@ -952,14 +1067,18 @@ function iniciarSyncAutomatico() {
   window.addEventListener('offline', () => { atualizarIndicadorSync('sync-offline', 'Offline'); });
 }
 
-/* =================== OLHO =================== */
+/* ══════════════════════════════════════════════════════════════
+   OLHO
+   ══════════════════════════════════════════════════════════════ */
 const EYE_ON='<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>';
 const EYE_OFF='<path d="M17.94 17.94A10 10 0 0 1 12 20C5 20 1 12 1 12a18 18 0 0 1 5.06-5.94M9.9 4.24A9 9 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
 function atualizaOlho(){ const e=document.getElementById('eyeIcon'); if(e) e.innerHTML = mostrarValores?EYE_ON:EYE_OFF; }
 function atualizaOlho2(){ const e=document.getElementById('eyeIcon2'); if(e) e.innerHTML = mostrarValores?EYE_ON:EYE_OFF; }
 function money(x){ return mostrarValores ? BRL.format(x) : 'R$ ••••'; }
 
-/* =================== AÇÕES CAIXA =================== */
+/* ══════════════════════════════════════════════════════════════
+   AÇÕES CAIXA
+   ══════════════════════════════════════════════════════════════ */
 function addMovimento(tipo, valor, forma, desc, data, hora){
   estado.movimentos.push({id:id(), data:data||dataSel, hora:hora!==undefined?hora:agora(), tipo, forma, valor:Math.round(valor*100)/100, desc:desc||''});
   salvar(); render();
@@ -988,22 +1107,41 @@ function mostrarFeedback(tipo, forma, valor) {
   setTimeout(() => feedback.remove(), 1500);
 }
 
-/* =================== RENDER =================== */
+/* ══════════════════════════════════════════════════════════════
+   RENDER
+   ══════════════════════════════════════════════════════════════ */
 function render(){
   const dia = estado.movimentos.filter(m=>m.data===dataSel);
   const ent = dia.filter(m=>m.tipo==='entrada');
   const sai = dia.filter(m=>m.tipo==='saida');
   const totE = ent.reduce((a,b)=>a+b.valor,0);
   const totS = sai.reduce((a,b)=>a+b.valor,0);
+  
   document.getElementById('totEnt').textContent = money(totE);
   document.getElementById('totSai').textContent = money(totS);
   document.getElementById('saldo').textContent = money(totE-totS);
   document.getElementById('saldo').style.color = (totE-totS)<0?'#FF6B6B':'#4CAF50';
 
   const caixaAnterior = obterCaixaAnterior();
+  const dataUltimoFech = obterDataUltimoFechamento();
   const entradasDinheiro = ent.filter(m=>m.forma==='Dinheiro').reduce((a,b)=>a+b.valor,0);
   const saidasDinheiro = sai.filter(m=>m.forma==='Dinheiro').reduce((a,b)=>a+b.valor,0);
   const gav = caixaAnterior + entradasDinheiro - saidasDinheiro;
+
+  // Atualiza labels com a data do último fechamento
+  const labelCaixa = document.getElementById('labelCaixaAnterior');
+  if (dataUltimoFech) {
+    labelCaixa.innerHTML = '<span class="sq" style="background:var(--gold)"></span>Dinheiro em Caixa (' + fmtBR(dataUltimoFech) + ')';
+  } else {
+    labelCaixa.innerHTML = '<span class="sq" style="background:var(--gold)"></span>Dinheiro em Caixa (sem fech. anterior)';
+  }
+  
+  const labelFechAnt = document.getElementById('labelFechAnterior');
+  if (dataUltimoFech) {
+    labelFechAnt.innerHTML = '🏦 Fechamento (' + fmtBR(dataUltimoFech) + ')';
+  } else {
+    labelFechAnt.innerHTML = '🏦 Sem fechamento anterior';
+  }
 
   document.getElementById('dinheiroCaixaAnterior').textContent = money(caixaAnterior);
   document.getElementById('fechCaixaAnterior').textContent = BRL.format(caixaAnterior);
@@ -1055,7 +1193,9 @@ function render(){
   atualizaOlho(); atualizaOlho2();
 }
 
-/* =================== RELATÓRIO DE DIFERENÇAS =================== */
+/* ══════════════════════════════════════════════════════════════
+   RELATÓRIO DE DIFERENÇAS
+   ══════════════════════════════════════════════════════════════ */
 function renderRelDiferencas() {
   const el = document.getElementById('relDiferencas');
   if (!el) return;
@@ -1073,25 +1213,22 @@ function renderRelDiferencas() {
   });
   html += '</tbody></table>';
   html += '<div style="margin-top:15px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center;">' +
-    '<div style="background:#F0F7F1; padding:12px; border-radius:10px;"><b style="color:#2E7D32;">Vendas não marcadas (sobras)</b><br>' + BRL.format(totalSobra) + '</div>' +
-    '<div style="background:#FDF1F0; padding:12px; border-radius:10px;"><b style="color:#E63946;">Faltas de dinheiro</b><br>' + BRL.format(totalFalta) + '</div>' +
-    '<div style="background:#FFF8EE; padding:12px; border-radius:10px;"><b style="color:#E8A838;">Saldo Líquido</b><br>' + BRL.format(totalSobra - totalFalta) + '</div></div>';
-  if (totalSobra > 0) {
-    html += '<div style="margin-top:10px; padding:12px; background:#FFF8E1; border-left:4px solid #FFB300; border-radius:8px; font-size:13px; color:#5D4037;">' +
-        '💡 <b>Importante:</b> As sobras de dinheiro (' + BRL.format(totalSobra) + ') representam vendas que foram feitas mas não foram marcadas no sistema.' +
-        '</div>';
-  }
+    '<div style="background:#F0F7F1; padding:12px; border-radius:10px;"><b style="color:#2E7D32;">Sobras</b><br>' + BRL.format(totalSobra) + '</div>' +
+    '<div style="background:#FDF1F0; padding:12px; border-radius:10px;"><b style="color:#E63946;">Faltas</b><br>' + BRL.format(totalFalta) + '</div>' +
+    '<div style="background:#FFF8EE; padding:12px; border-radius:10px;"><b style="color:#E8A838;">Saldo</b><br>' + BRL.format(totalSobra - totalFalta) + '</div></div>';
   el.innerHTML = html;
 }
 
-/* =================== GRÁFICO DE SOBRAS =================== */
+/* ══════════════════════════════════════════════════════════════
+   GRÁFICO DE SOBRAS
+   ══════════════════════════════════════════════════════════════ */
 function renderGraficoSobras(){
   const el=document.getElementById('sobrasBox');
   const resumoEl=document.getElementById('sobrasResumo');
   if(!el) return;
   const diferencas=estado.diferencas||{};
   const sobras=Object.entries(diferencas).filter(([k,v])=>v.diferenca>0).sort((a,b)=>a[0].localeCompare(b[0]));
-  if(sobras.length===0){ el.innerHTML='<div class="chartmsg">🎉 Nenhuma sobra registrada! Equipe está marcando tudo certinho.</div>'; if(resumoEl) resumoEl.innerHTML=''; return; }
+  if(sobras.length===0){ el.innerHTML='<div class="chartmsg">🎉 Nenhuma sobra registrada!</div>'; if(resumoEl) resumoEl.innerHTML=''; return; }
   const totalSobra=sobras.reduce((sum,[k,v])=>sum+v.diferenca,0);
   const mediaSobra=totalSobra/sobras.length;
   const maiorSobra=Math.max(...sobras.map(([k,v])=>v.diferenca));
@@ -1107,30 +1244,34 @@ function renderGraficoSobras(){
     gridLines+='<text x="'+(mL-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" fill="#999">'+fmtKk(v)+'</text>'; }
   let barras='';
   sobras.forEach(([data,v],i)=>{
-    const cx=mL+gap*i+gap/2; const bh=(v.diferenca/maxVal)*ih; const cor='#FF9800';
-    barras+='<rect x="'+(cx-bw/2)+'" y="'+(mT+ih-bh)+'" width="'+bw+'" height="'+bh+'" rx="4" fill="'+cor+'" opacity="0.9"><title>'+fmtBR(data)+': '+BRL.format(v.diferenca)+'</title></rect>';
+    const cx=mL+gap*i+gap/2; const bh=(v.diferenca/maxVal)*ih;
+    barras+='<rect x="'+(cx-bw/2)+'" y="'+(mT+ih-bh)+'" width="'+bw+'" height="'+bh+'" rx="4" fill="#FF9800" opacity="0.9"><title>'+fmtBR(data)+': '+BRL.format(v.diferenca)+'</title></rect>';
     barras+='<text x="'+cx+'" y="'+(mT+ih-bh-8)+'" text-anchor="middle" font-size="10" fill="#E65100" font-weight="700">'+fmtKk(v.diferenca)+'</text>';
     barras+='<text x="'+cx+'" y="'+(H-15)+'" text-anchor="middle" font-size="9" fill="#666">'+fmtBR(data).slice(0,5)+'</text>'; });
   el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;" preserveAspectRatio="xMidYMid meet">'+gridLines+barras+'</svg>';
   if(resumoEl){
     resumoEl.innerHTML='<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; text-align:center; margin-top:10px;">'+
-      '<div style="background:#FFF3E0; padding:12px; border-radius:10px;"><b style="color:#E65100;">Total de sobras</b><br><span style="font-size:18px;font-weight:700;">'+BRL.format(totalSobra)+'</span></div>'+
-      '<div style="background:#FFF3E0; padding:12px; border-radius:10px;"><b style="color:#E65100;">Média por dia</b><br><span style="font-size:18px;font-weight:700;">'+BRL.format(mediaSobra)+'</span></div>'+
+      '<div style="background:#FFF3E0; padding:12px; border-radius:10px;"><b style="color:#E65100;">Total sobras</b><br><span style="font-size:18px;font-weight:700;">'+BRL.format(totalSobra)+'</span></div>'+
+      '<div style="background:#FFF3E0; padding:12px; border-radius:10px;"><b style="color:#E65100;">Média/dia</b><br><span style="font-size:18px;font-weight:700;">'+BRL.format(mediaSobra)+'</span></div>'+
       '<div style="background:#FFEBEE; padding:12px; border-radius:10px;"><b style="color:#C62828;">Pior dia</b><br><span style="font-size:14px;">'+fmtBR(piorDia[0])+': '+BRL.format(maiorSobra)+'</span></div></div>';
   }
 }
 
-/* =================== BACKUP =================== */
+/* ══════════════════════════════════════════════════════════════
+   BACKUP
+   ══════════════════════════════════════════════════════════════ */
 function baixar(nome, conteudo, tipo){ const blob=new Blob([conteudo],{type:tipo}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=nome; a.click(); }
-function fazerBackup(){ baixar('caixa-'+hojeISO()+'.json', JSON.stringify(estado,null,2),'application/json'); toast('Backup salvo!'); }
+function fazerBackup(){ baixar('caixa-'+hojeISO()+'.json', JSON.stringify({estado, caderninho},null,2),'application/json'); toast('Backup salvo!'); }
 function exportarCSV(){
   let linhas='Data;Hora;Tipo;Forma;Valor;Descrição\n';
   estado.movimentos.forEach(m=>{ linhas+=m.data+';'+m.hora+';'+m.tipo+';'+m.forma+';'+m.valor.toFixed(2).replace('.',',')+';'+m.desc+'\n'; });
   baixar('caixa-'+hojeISO()+'.csv', '\ufeff'+linhas,'text/csv;charset=utf-8'); toast('Excel gerado!');
 }
-function restaurar(file){ const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.movimentos){ estado=d; salvar(); render(); renderBaseResumo(); toast('Backup restaurado!'); } } catch(e){ alert('Arquivo inválido.'); } }; r.readAsText(file); }
+function restaurar(file){ const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.movimentos){ estado=d; salvar(); render(); renderBaseResumo(); toast('Backup restaurado!'); } else if(d.estado){ estado=d.estado; caderninho=d.caderninho||{}; salvar(); salvarCaderninhoStorage(); render(); renderBaseResumo(); renderCaderninho(); toast('Backup restaurado!'); } } catch(e){ alert('Arquivo inválido.'); } }; r.readAsText(file); }
 
-/* =================== IMPORTAÇÃO =================== */
+/* ══════════════════════════════════════════════════════════════
+   IMPORTAÇÃO
+   ══════════════════════════════════════════════════════════════ */
 let impRows=[], impHeaders=[];
 function parseCSV(text){
   const linhas=text.replace(/\r/g,'').split('\n').filter(l=>l.trim().length);
@@ -1145,7 +1286,7 @@ function parseCSV(text){
   return {headers:rows[0], rows:rows.slice(1)};
 }
 function preencherMapa(){
-  const opts=(sel)=>{ return '<option value="">(não tem)</option>'+impHeaders.map((h,i)=>'<option value="'+i+'">'+escapar(h||('coluna '+(i+1)))+'</option>').join(''); };
+  const opts=()=> '<option value="">(não tem)</option>'+impHeaders.map((h,i)=>'<option value="'+i+'">'+escapar(h||('coluna '+(i+1)))+'</option>').join('');
   ['mData','mValor','mTipo','mForma','mDesc'].forEach(idsel=>{ document.getElementById(idsel).innerHTML=opts(); });
   const acha=(...ks)=>{ for(let i=0;i<impHeaders.length;i++){ const h=impHeaders[i].toLowerCase(); if(ks.some(k=>h.includes(k))) return i; } return ''; };
   document.getElementById('mData').value=acha('data','dia');
@@ -1189,7 +1330,9 @@ function renderBaseResumo(){
   el.innerHTML='<table><thead><tr><th>Ano</th><th>Lançam.</th><th>Entradas</th><th>Saídas</th></tr></thead><tbody>'+anos.map(a=>'<tr><td>'+a+'</td><td>'+porAno[a].n+'</td><td>'+money(porAno[a].ent)+'</td><td>'+money(porAno[a].sai)+'</td></tr>').join('')+'</tbody></table>';
 }
 
-/* =================== RELATÓRIOS =================== */
+/* ══════════════════════════════════════════════════════════════
+   RELATÓRIOS
+   ══════════════════════════════════════════════════════════════ */
 let relView = 'dia'; let relSel = null;
 const MESES3 = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const DOW3 = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
@@ -1264,9 +1407,8 @@ function relGraficoGanhosGastos(){
     if(sh>0){ barras+='<rect x="'+(cx+2)+'" y="'+(mT+ih-sh)+'" width="'+bw+'" height="'+sh+'" rx="3" fill="#E53935" opacity="0.85"><title>'+lb+': -'+BRL.format(saidas[i])+'</title></rect>';
       barras+='<text x="'+(cx+bw/2+2)+'" y="'+(mT+ih-sh-6)+'" text-anchor="middle" font-size="9" fill="#C62828" font-weight="700">'+fmtKk(saidas[i])+'</text>'; }
     barras+='<text x="'+cx+'" y="'+(H-15)+'" text-anchor="middle" font-size="10" fill="#666">'+lb+'</text>'; });
-  const legY=18;
-  let legenda='<circle cx="'+(W-160)+'" cy="'+legY+'" r="6" fill="#43A047" opacity="0.9"/><text x="'+(W-148)+'" y="'+(legY+4)+'" font-size="12" fill="#555" font-weight="600">Ganhos</text>';
-  legenda+='<circle cx="'+(W-80)+'" cy="'+legY+'" r="6" fill="#E53935" opacity="0.85"/><text x="'+(W-68)+'" y="'+(legY+4)+'" font-size="12" fill="#555" font-weight="600">Gastos</text>';
+  let legenda='<circle cx="'+(W-160)+'" cy="18" r="6" fill="#43A047" opacity="0.9"/><text x="'+(W-148)+'" y="22" font-size="12" fill="#555" font-weight="600">Ganhos</text>';
+  legenda+='<circle cx="'+(W-80)+'" cy="18" r="6" fill="#E53935" opacity="0.85"/><text x="'+(W-68)+'" y="22" font-size="12" fill="#555" font-weight="600">Gastos</text>';
   el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;" preserveAspectRatio="xMidYMid meet">'+legenda+gridLines+barras+'</svg>';
 }
 function relGraficoFormasPagamento(){
@@ -1277,36 +1419,23 @@ function relGraficoFormasPagamento(){
   const formas={}; entradas.forEach(m=>{ formas[m.forma]=(formas[m.forma]||0)+m.valor; });
   const total=Object.values(formas).reduce((a,b)=>a+b,0);
   const cores={Dinheiro:'#2E7D32', Pix:'#12A5A5', 'Débito':'#457B9D', 'Crédito':'#E7A924', 'Crédito Parcelado':'#DAA520', Ficha:'#9C27B0'};
-  
   const W=500, H=Math.max(200, Object.keys(formas).length*50+20);
   const mL=110, mR=60, mT=10, mB=10;
   const iw=W-mL-mR, ih=H-mT-mB;
   const barH=Math.min(35, (ih-10)/Object.keys(formas).length);
   const gap=8;
-  
   let html='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;min-height:200px;" preserveAspectRatio="xMidYMid meet">';
-  
   let y=mT;
   Object.entries(formas).sort((a,b)=>b[1]-a[1]).forEach(([forma,valor])=>{
     const pct=(valor/total)*100;
     const barW=(valor/total)*iw;
     const cor=cores[forma]||'#94A3B8';
-    
-    // Label
     html+='<text x="'+(mL-8)+'" y="'+(y+barH/2+4)+'" text-anchor="end" font-size="11" fill="#555" font-weight="600">'+forma+'</text>';
-    
-    // Barra
     html+='<rect x="'+mL+'" y="'+y+'" width="'+Math.max(barW,2)+'" height="'+barH+'" rx="5" fill="'+cor+'" opacity="0.9"><title>'+forma+': '+BRL.format(valor)+' ('+pct.toFixed(0)+'%)</title></rect>';
-    
-    // Valor
     html+='<text x="'+(mL+barW+6)+'" y="'+(y+barH/2+4)+'" font-size="11" fill="#333" font-weight="700">'+BRL.format(valor)+'</text>';
-    
-    // Percentual
     html+='<text x="'+(W-mR)+'" y="'+(y+barH/2+4)+'" text-anchor="end" font-size="10" fill="#888">'+pct.toFixed(0)+'%</text>';
-    
     y+=barH+gap;
   });
-  
   html+='</svg>';
   el.innerHTML=html;
 }
@@ -1343,72 +1472,18 @@ function renderRelatorios(){
   popularSeletor(); relKpis(); relGraficoGanhosGastos(); relGraficoFormasPagamento(); relGraficoDiasSemana(); relInsights(); renderRelDiferencas(); renderGraficoSobras();
 }
 
-/* =================== EVENTOS =================== */
-document.querySelectorAll('.mbtn').forEach(b=>b.onclick=()=>lancarEntrada(b.dataset.forma));
-document.getElementById('btnSaida').onclick=lancarSaida;
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ filtro=b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b)); render(); });
-document.getElementById('dataSel').addEventListener('change', e=>{ dataSel=e.target.value; render(); });
-document.getElementById('btnHoje').onclick=()=>{ dataSel=hojeISO(); document.getElementById('dataSel').value=dataSel; render(); };
-document.getElementById('btnEye').onclick=()=>{ mostrarValores=!mostrarValores; atualizaOlho(); atualizaOlho2(); render(); };
-document.getElementById('btnEye2').onclick=()=>{ mostrarValores=!mostrarValores; atualizaOlho(); atualizaOlho2(); render(); renderRelatorios(); };
-document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.tabbar button').forEach(x=>x.classList.toggle('on',x===b));
-  document.getElementById('pageCaixa').classList.toggle('on', b.dataset.page==='caixa');
-  document.getElementById('pageBases').classList.toggle('on', b.dataset.page==='bases');
-  document.getElementById('pageRelatorios').classList.toggle('on', b.dataset.page==='relatorios');
-  document.getElementById('pageFechamento').classList.toggle('on', b.dataset.page==='fechamento');
-  if(b.dataset.page==='bases') renderBaseResumo();
-  if(b.dataset.page==='relatorios') renderRelatorios();
-  if(b.dataset.page==='fechamento') renderCaderninho();
-});
-document.getElementById('btnAddEmprestimo').onclick = addEmprestimo;
-document.getElementById('btnAddRecebido').onclick = addRecebido;
-document.getElementById('btnSalvarCaderno').onclick = salvarObs;
-document.getElementById('btnCorrigirFechamento').onclick = corrigirFechamentoCaderno;
-const drop=document.getElementById('drop'), csvInput=document.getElementById('csvInput');
-drop.onclick=()=>csvInput.click();
-drop.addEventListener('dragover', e=>{ e.preventDefault(); });
-drop.addEventListener('drop', e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) rotearArquivo(e.dataTransfer.files[0]); });
-csvInput.addEventListener('change', e=>{ if(e.target.files[0]) rotearArquivo(e.target.files[0]); });
-function rotearArquivo(file){
-  document.getElementById('mapBox').classList.remove('on');
-  document.getElementById('xlsxResumo').style.display='none';
-  const n=file.name.toLowerCase();
-  if(n.endsWith('.xlsx')||n.endsWith('.xls')){ lerExcel(file); }
-  else{ const r=new FileReader(); r.onload=()=>{ const {headers,rows}=parseCSV(r.result); if(!rows.length){ toast('Nenhuma linha.'); return; } impHeaders=headers; impRows=rows; preencherMapa(); }; r.readAsText(file,'utf-8'); }
-}
-['mData','mValor','mTipo','mForma','mDesc'].forEach(idsel=>document.getElementById(idsel).addEventListener('change', previewImport));
-document.getElementById('btnImportar').onclick=importar;
-document.getElementById('btnBackup').onclick=fazerBackup;
-document.getElementById('btnCsv').onclick=exportarCSV;
-document.getElementById('btnRestaurar').onclick=()=>document.getElementById('fileInput').click();
-document.getElementById('fileInput').addEventListener('change', e=>{ if(e.target.files[0]) restaurar(e.target.files[0]); });
-document.getElementById('btnLimpar').onclick=()=>{ if(confirm('Apagar TUDO?')){ estado.movimentos=[]; salvar(); render(); renderBaseResumo(); toast('Base limpa.'); } };
-document.querySelectorAll('#segView button').forEach(b=>b.onclick=()=>{ relView=b.dataset.view; relSel=null; document.querySelectorAll('#segView button').forEach(x=>x.classList.toggle('on',x===b)); renderRelatorios(); });
-document.getElementById('relPeriodo').addEventListener('change', e=>{ relSel=e.target.value; renderRelatorios(); });
-function limparLocal(){
-  if(confirm('⚠️ Apagar TODOS os dados locais?')){
-    localStorage.clear();
-    toast('✅ Dados locais limpos! Recarregando...');
-    setTimeout(()=>location.reload(),1500);
-  }
-}
-/* =================== CADERNINHO =================== */
-let caderninho = {};
-
+/* ══════════════════════════════════════════════════════════════
+   CADERNINHO
+   ══════════════════════════════════════════════════════════════ */
 function carregarCaderninho() {
   try {
     const s = localStorage.getItem('caderninho_bazar_sandra');
     if (s) caderninho = JSON.parse(s);
-  } catch(e) {
-    caderninho = {};
-  }
+  } catch(e) { caderninho = {}; }
 }
 
 function salvarCaderninhoStorage() {
-  try {
-    localStorage.setItem('caderninho_bazar_sandra', JSON.stringify(caderninho));
-  } catch(e) {}
+  try { localStorage.setItem('caderninho_bazar_sandra', JSON.stringify(caderninho)); } catch(e) {}
 }
 
 function renderCaderninho() {
@@ -1419,23 +1494,20 @@ function renderCaderninho() {
   const fechamentoOficial = estado.fechamentos?.[dataSel] || 0;
   const valorFechamento = typeof fechamentoOficial === 'object' ? fechamentoOficial.valor : fechamentoOficial;
   
-  // Preenche o input de corrigir (só se não estiver sendo editado)
   const inputFech = document.getElementById('fechValorCaderno');
   if (inputFech && document.activeElement !== inputFech) {
     inputFech.value = valorFechamento.toFixed(2).replace('.', ',');
   }
   
-  // Renderiza empréstimos
   document.getElementById('listaEmprestimos').innerHTML = registro.emprestimos.map((e, i) => 
     '<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #ddd;">' +
-    '<span>' + e.pessoa + '</span><span>' + BRL.format(e.valor) + '</span>' +
+    '<span>' + escapar(e.pessoa) + '</span><span>' + BRL.format(e.valor) + '</span>' +
     '<button onclick="removerEmprestimo(' + i + ')" style="background:none;border:none;color:red;cursor:pointer;">✕</button></div>'
   ).join('');
   
-  // Renderiza recebidos
   document.getElementById('listaRecebidos').innerHTML = registro.recebidos.map((r, i) => 
     '<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #ddd;">' +
-    '<span>' + r.pessoa + '</span><span>' + BRL.format(r.valor) + '</span>' +
+    '<span>' + escapar(r.pessoa) + '</span><span>' + BRL.format(r.valor) + '</span>' +
     '<button onclick="removerRecebido(' + i + ')" style="background:none;border:none;color:red;cursor:pointer;">✕</button></div>'
   ).join('');
   
@@ -1508,7 +1580,7 @@ function renderCaderninho() {
           '<span>💳 Rec: ' + BRL.format(rec) + '</span>' +
           '<span>🏦 Saldo real: <b>' + BRL.format(saldoReal) + '</b></span>' +
         '</div>' +
-        (r.obs ? '<div style="margin-top:5px; font-size:12px; color:#555; font-style:italic;">📝 ' + r.obs + '</div>' : '') +
+        (r.obs ? '<div style="margin-top:5px; font-size:12px; color:#555; font-style:italic;">📝 ' + escapar(r.obs) + '</div>' : '') +
       '</div>';
     }).join('');
   }
@@ -1564,6 +1636,7 @@ function salvarObs() {
   toast('✅ Anotações salvas!');
 }
 
+/* ⚠️ CORRIGIR FECHAMENTO - salva APENAS no dia selecionado */
 function corrigirFechamentoCaderno() {
   const input = document.getElementById('fechValorCaderno');
   const novoValor = parseValor(input.value);
@@ -1576,12 +1649,24 @@ function corrigirFechamentoCaderno() {
   if (!estado.fechamentos) estado.fechamentos = {};
   estado.fechamentos[dataSel] = novoValor;
   
-  // Recalcular diferença
+  // Recalcular diferença SOMENTE para este dia
   const dia = estado.movimentos.filter(m => m.data === dataSel);
   const entradasDinheiro = dia.filter(m => m.tipo === 'entrada' && m.forma === 'Dinheiro').reduce((a,b) => a + b.valor, 0);
   const saidasDinheiro = dia.filter(m => m.tipo === 'saida' && m.forma === 'Dinheiro').reduce((a,b) => a + b.valor, 0);
-  const caixaAnterior = obterCaixaAnterior();
-  const saldoEsperado = caixaAnterior + entradasDinheiro - saidasDinheiro;
+  
+  // Buscar o ÚLTIMO fechamento ANTES desta data (não do dia anterior)
+  const datasAnteriores = Object.keys(estado.fechamentos)
+    .filter(d => d < dataSel && d !== dataSel)
+    .sort()
+    .reverse();
+  
+  const caixaAnt = datasAnteriores.length > 0 ? 
+    (typeof estado.fechamentos[datasAnteriores[0]] === 'number' ? 
+      estado.fechamentos[datasAnteriores[0]] : 
+      (estado.fechamentos[datasAnteriores[0]]?.valor || 0)) 
+    : 0;
+  
+  const saldoEsperado = caixaAnt + entradasDinheiro - saidasDinheiro;
   const diferenca = novoValor - saldoEsperado;
   
   if (!estado.diferencas) estado.diferencas = {};
@@ -1592,18 +1677,76 @@ function corrigirFechamentoCaderno() {
   renderCaderninho();
   if (navigator.onLine) sincronizarDadosCompletos();
   
-  toast('✅ Fechamento corrigido: ' + BRL.format(novoValor));
+  toast('✅ Fechamento de ' + fmtBR(dataSel) + ' corrigido: ' + BRL.format(novoValor));
 }
-/* =================== INICIALIZAÇÃO =================== */
+
+/* ══════════════════════════════════════════════════════════════
+   EVENTOS
+   ══════════════════════════════════════════════════════════════ */
+document.querySelectorAll('.mbtn').forEach(b=>b.onclick=()=>lancarEntrada(b.dataset.forma));
+document.getElementById('btnSaida').onclick=lancarSaida;
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ filtro=b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b)); render(); });
+document.getElementById('dataSel').addEventListener('change', e=>{ dataSel=e.target.value; render(); renderCaderninho(); });
+document.getElementById('btnHoje').onclick=()=>{ dataSel=hojeISO(); document.getElementById('dataSel').value=dataSel; render(); renderCaderninho(); };
+document.getElementById('btnEye').onclick=()=>{ mostrarValores=!mostrarValores; atualizaOlho(); atualizaOlho2(); render(); };
+document.getElementById('btnEye2').onclick=()=>{ mostrarValores=!mostrarValores; atualizaOlho(); atualizaOlho2(); render(); renderRelatorios(); };
+
+document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabbar button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('pageCaixa').classList.toggle('on', b.dataset.page==='caixa');
+  document.getElementById('pageBases').classList.toggle('on', b.dataset.page==='bases');
+  document.getElementById('pageRelatorios').classList.toggle('on', b.dataset.page==='relatorios');
+  document.getElementById('pageFechamento').classList.toggle('on', b.dataset.page==='fechamento');
+  if(b.dataset.page==='bases') renderBaseResumo();
+  if(b.dataset.page==='relatorios') renderRelatorios();
+  if(b.dataset.page==='fechamento') renderCaderninho();
+});
+
+document.getElementById('btnAddEmprestimo').onclick = addEmprestimo;
+document.getElementById('btnAddRecebido').onclick = addRecebido;
+document.getElementById('btnSalvarCaderno').onclick = salvarObs;
+document.getElementById('btnCorrigirFechamento').onclick = corrigirFechamentoCaderno;
+
+const drop=document.getElementById('drop'), csvInput=document.getElementById('csvInput');
+drop.onclick=()=>csvInput.click();
+drop.addEventListener('dragover', e=>{ e.preventDefault(); });
+drop.addEventListener('drop', e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) rotearArquivo(e.dataTransfer.files[0]); });
+csvInput.addEventListener('change', e=>{ if(e.target.files[0]) rotearArquivo(e.target.files[0]); });
+function rotearArquivo(file){
+  document.getElementById('mapBox').classList.remove('on');
+  document.getElementById('xlsxResumo').style.display='none';
+  const n=file.name.toLowerCase();
+  if(n.endsWith('.xlsx')||n.endsWith('.xls')){ alert('Use CSV. Conversão de Excel não disponível nesta versão.'); }
+  else{ const r=new FileReader(); r.onload=()=>{ const {headers,rows}=parseCSV(r.result); if(!rows.length){ toast('Nenhuma linha.'); return; } impHeaders=headers; impRows=rows; preencherMapa(); }; r.readAsText(file,'utf-8'); }
+}
+['mData','mValor','mTipo','mForma','mDesc'].forEach(idsel=>document.getElementById(idsel).addEventListener('change', previewImport));
+document.getElementById('btnImportar').onclick=importar;
+document.getElementById('btnBackup').onclick=fazerBackup;
+document.getElementById('btnCsv').onclick=exportarCSV;
+document.getElementById('btnRestaurar').onclick=()=>document.getElementById('fileInput').click();
+document.getElementById('fileInput').addEventListener('change', e=>{ if(e.target.files[0]) restaurar(e.target.files[0]); });
+document.getElementById('btnLimpar').onclick=()=>{ if(confirm('Apagar TUDO?')){ estado.movimentos=[]; estado.fechamentos={}; estado.diferencas={}; salvar(); render(); renderBaseResumo(); toast('Base limpa.'); } };
+document.querySelectorAll('#segView button').forEach(b=>b.onclick=()=>{ relView=b.dataset.view; relSel=null; document.querySelectorAll('#segView button').forEach(x=>x.classList.toggle('on',x===b)); renderRelatorios(); });
+document.getElementById('relPeriodo').addEventListener('change', e=>{ relSel=e.target.value; renderRelatorios(); });
+function limparLocal(){
+  if(confirm('⚠️ Apagar TODOS os dados locais?')){
+    localStorage.clear();
+    toast('✅ Dados locais limpos! Recarregando...');
+    setTimeout(()=>location.reload(),1500);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   INICIALIZAÇÃO
+   ══════════════════════════════════════════════════════════════ */
 carregarCaderninho();
 document.getElementById('dataSel').value = dataSel;
-
 render();
 document.getElementById('valor').focus();
 atualizaOlho();
 atualizaOlho2();
 iniciarSyncAutomatico();
-console.log('✅ Sistema iniciado com sync automático por meses');
+console.log('✅ Sistema iniciado — v2.0 (fechamentos corrigidos)');
 </script>
 </body>
 </html>
